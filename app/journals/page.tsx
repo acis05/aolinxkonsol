@@ -14,19 +14,33 @@ export default async function Journals({searchParams}:{searchParams:Promise<Reco
   const from=q.from?new Date(`${q.from}T00:00:00`):undefined
   const to=q.to?new Date(`${q.to}T23:59:59.999`):undefined
 
-  const journals=await prisma.journal.findMany({
-    where:{
+  const page=Math.max(1,Number(q.page||1)||1)
+  const pageSize=100
+  const where:any={
       company:{userId:user.id},
       ...(companyId?{companyId}:{}),
       ...(from||to?{transDate:{...(from?{gte:from}:{}),...(to?{lte:to}:{})}}:{}),
       ...(keyword?{OR:[{number:{contains:keyword,mode:'insensitive'}},{description:{contains:keyword,mode:'insensitive'}}]}:{})
-    },
-    include:{company:true,lines:{include:{account:true},orderBy:{id:'asc'}}},
-    orderBy:[{transDate:'desc'},{number:'desc'}],
-    take:500
-  })
-
-  const totalLines=journals.reduce((n,j)=>n+j.lines.length,0)
+    }
+  const [journalCount,lineCount,headerOnlyCount,journals]=await Promise.all([
+    prisma.journal.count({where}),
+    prisma.journalLine.count({where:{journal:{is:where}}}),
+    prisma.journal.count({where:{...where,lines:{none:{}}}}),
+    prisma.journal.findMany({
+      where,
+      include:{company:true,lines:{include:{account:true},orderBy:{id:'asc'}}},
+      orderBy:[{transDate:'desc'},{number:'desc'}],
+      skip:(page-1)*pageSize,
+      take:pageSize
+    })
+  ])
+  const pageCount=Math.max(1,Math.ceil(journalCount/pageSize))
+  const pageHref=(nextPage:number)=>{
+    const entries=Object.entries(q).filter(([,v])=>v!==undefined) as [string,string][]
+    const sp=new URLSearchParams(entries)
+    sp.set('page',String(nextPage))
+    return `?${sp.toString()}`
+  }
   return <>
     <div className="top"><div><div className="eyebrow">General Ledger Source</div><h1>Jurnal Umum Accurate</h1><div className="muted">Seluruh Journal Voucher yang sudah disinkronkan. Baris debit/kredit inilah sumber laporan konsolidasi KONSAOL.</div></div></div>
     <form className="card form">
@@ -37,11 +51,12 @@ export default async function Journals({searchParams}:{searchParams:Promise<Reco
       <button className="btn" style={{alignSelf:'end'}}><Search size={14}/> Tampilkan</button>
     </form>
     <div className="grid grid4" style={{marginTop:16}}>
-      <div className="card metricCard"><div className="metricLabel">Jurnal tampil</div><div className="metric">{journals.length.toLocaleString('id-ID')}</div></div>
-      <div className="card metricCard"><div className="metricLabel">Baris debit/kredit</div><div className="metric">{totalLines.toLocaleString('id-ID')}</div></div>
+      <div className="card metricCard"><div className="metricLabel">Total jurnal</div><div className="metric">{journalCount.toLocaleString('id-ID')}</div></div>
+      <div className="card metricCard"><div className="metricLabel">Baris debit/kredit</div><div className="metric">{lineCount.toLocaleString('id-ID')}</div></div>
       <div className="card metricCard"><div className="metricLabel">Database aktif</div><div className="metric">{companies.length.toLocaleString('id-ID')}</div></div>
-      <div className="card metricCard"><div className="metricLabel">Batas tampilan</div><div className="metric">500</div></div>
+      <div className="card metricCard"><div className="metricLabel">Header tanpa detail</div><div className="metric">{headerOnlyCount.toLocaleString('id-ID')}</div></div>
     </div>
+    {headerOnlyCount>0?<div className="alert" style={{marginTop:16}}><b>{headerOnlyCount.toLocaleString('id-ID')} jurnal masih tanpa detail debit/kredit.</b> Ini biasanya data hasil sync versi lama. Jalankan <b>Sync Semua JV</b> kembali; versi baru akan mengisi detailnya.</div>:null}
     <div className="card" style={{marginTop:16}}>
       <div className="sectionHeader"><div><h2><BookOpenText size={17} style={{verticalAlign:'-3px',marginRight:7}}/>Transaksi Journal Voucher</h2><div className="muted">Buka detail setiap jurnal untuk melihat akun, memo, debit dan kredit.</div></div></div>
       <div className="journalList">
@@ -61,6 +76,7 @@ export default async function Journals({searchParams}:{searchParams:Promise<Reco
         })}
       </div>
       {!journals.length?<div className="empty">Belum ada Jurnal Umum. Buka menu Perusahaan lalu klik <b>Sync Semua JV</b> pada database yang dipilih.</div>:null}
+      {pageCount>1?<div className="form" style={{justifyContent:'center',marginTop:18}}>{page>1?<a className="btn secondary" href={pageHref(page-1)}>← Sebelumnya</a>:null}<span className="muted">Halaman {page} / {pageCount}</span>{page<pageCount?<a className="btn secondary" href={pageHref(page+1)}>Berikutnya →</a>:null}</div>:null}
     </div>
   </>
 }

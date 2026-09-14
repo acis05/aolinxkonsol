@@ -68,3 +68,10 @@ ACCURATE_REDIRECT_URI=https://konsaol-production.up.railway.app/api/accurate/oau
 - Pagination JV mengikuti `sp.pageCount`, bukan berhenti berdasarkan jumlah row halaman pertama.
 - `journal-voucher/detail.do` sekarang wajib berhasil agar baris debit/kredit disimpan; error detail ditampilkan kembali ke halaman Perusahaan.
 - Filter tanggal HTML (`yyyy-MM-dd`) otomatis dikonversi ke format API Accurate (`dd/MM/yyyy`).
+
+
+## JV sync optimization (v2.1)
+- `list.do` now requests `detailJournalVoucher` inline when Accurate supports it.
+- Falls back to `detail.do` only for rows without inline details, with concurrency limited to 8.
+- Response parser prefers object `r` over message-array `d` to avoid zero-line journals.
+- Journal page is paginated and reports legacy header-only rows.

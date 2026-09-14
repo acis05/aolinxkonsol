@@ -8,18 +8,21 @@ export type JournalListOptions = {
   to?: string
   page?: number
   pageSize?: number
+  includeLines?: boolean
 }
 
 export async function listJournalVouchers(opts: JournalListOptions) {
   const path = process.env.ACCURATE_JOURNAL_LIST_PATH || '/accurate/api/journal-voucher/list.do'
+  const basicFields = 'id,number,transDate,description,lastUpdate'
   const params: Record<string,string|number|undefined> = {
-    fields: 'id,number,transDate,description,lastUpdate',
+    // Dokumentasi Accurate menyebut fields pada list boleh memakai field dari detail.do.
+    // Kita coba ambil detailJournalVoucher sekaligus agar tidak perlu N request detail.
+    fields: opts.includeLines === false ? basicFields : `${basicFields},detailJournalVoucher`,
     'sp.page': opts.page || 1,
     'sp.pageSize': opts.pageSize || 100,
     'sp.sort': 'transDate|asc;number|asc'
   }
 
-  // Accurate menggunakan format tanggal dd/MM/yyyy untuk filter API.
   if (opts.from && opts.to) {
     params['filter.transDate.op'] = 'BETWEEN'
     params['filter.transDate.val[0]'] = opts.from
@@ -49,21 +52,36 @@ export function unwrapList(body: any): any[] {
 }
 
 export function unwrapDetail(body: any): any {
-  return body?.d ?? body?.r ?? body?.data ?? body?.result ?? body
+  // Accurate tidak selalu memakai envelope yang sama. Untuk response save, record
+  // dapat berada di `r` sementara `d` berisi array pesan. Jangan salah memilih d.
+  if (body?.r && typeof body.r === 'object' && !Array.isArray(body.r)) return body.r
+  if (body?.d && typeof body.d === 'object' && !Array.isArray(body.d)) return body.d
+  if (body?.data && typeof body.data === 'object' && !Array.isArray(body.data)) return body.data
+  if (body?.result && typeof body.result === 'object' && !Array.isArray(body.result)) return body.result
+  return body
 }
 
 export function journalDetailLines(detail:any):any[] {
+  if (!detail) return []
   const candidates = [
     detail?.detailJournalVoucher,
     detail?.detailJournalVouchers,
     detail?.detailJournalVoucherList,
-    detail?.details,
-    detail?.detail,
     detail?.journalVoucherDetail,
     detail?.journalVoucherDetails,
+    detail?.details,
+    detail?.detail,
     detail?.lines
   ]
   for (const value of candidates) if (Array.isArray(value)) return value
+  // Kadang envelope belum dibuka dengan struktur berbeda. Cari satu level tambahan.
+  for (const key of ['r','d','data','result']) {
+    const nested=detail?.[key]
+    if(nested && nested!==detail){
+      const found=journalDetailLines(nested)
+      if(found.length)return found
+    }
+  }
   return []
 }
 
