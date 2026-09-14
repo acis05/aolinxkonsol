@@ -3,6 +3,19 @@ import { prisma } from '@/lib/db'
 import { appUrl } from '@/lib/app-url'
 import { getCurrentUser, subscriptionInfo } from '@/lib/auth'
 import { openDatabase } from '@/lib/accurate/oauth'
-import { listGlAccounts, unwrapAccounts, mapAccountType } from '@/lib/accurate/accounts'
-async function syncCoa(userId:string,companyId:string,dbId:string){const opened=await openDatabase(userId,dbId);await prisma.company.update({where:{id:companyId},data:{accurateHost:opened.host,sessionId:opened.sessionId}});let page=1,total=0;while(page<=100){const body=await listGlAccounts({userId,host:opened.host,sessionId:opened.sessionId,page,pageSize:100});const rows=unwrapAccounts(body);for(const a of rows){const no=String(a.no||a.accountNo||a.id);await prisma.account.upsert({where:{companyId_accountNo:{companyId,accountNo:no}},update:{accurateId:a.id!=null?String(a.id):null,name:String(a.name||no),type:mapAccountType(a.accountType||a.type),parentNo:a.parentNo?String(a.parentNo):null,active:a.active!==false},create:{companyId,accurateId:a.id!=null?String(a.id):null,accountNo:no,name:String(a.name||no),type:mapAccountType(a.accountType||a.type),parentNo:a.parentNo?String(a.parentNo):null,active:a.active!==false}});total++}if(rows.length<100)break;page++}return total}
+import { listAllGlAccounts, mapAccountType } from '@/lib/accurate/accounts'
+async function syncCoa(userId:string,companyId:string,dbId:string){
+  const opened=await openDatabase(userId,dbId)
+  await prisma.company.update({where:{id:companyId},data:{accurateHost:opened.host,sessionId:opened.sessionId}})
+  const rows=await listAllGlAccounts({userId,host:opened.host,sessionId:opened.sessionId,pageSize:100})
+  for(const a of rows){
+    const no=String(a.no||a.accountNo||a.id)
+    await prisma.account.upsert({
+      where:{companyId_accountNo:{companyId,accountNo:no}},
+      update:{accurateId:a.id!=null?String(a.id):null,name:String(a.name||no),type:mapAccountType(a.accountType||a.type),parentNo:a.parentNo?String(a.parentNo):null,active:true},
+      create:{companyId,accurateId:a.id!=null?String(a.id):null,accountNo:no,name:String(a.name||no),type:mapAccountType(a.accountType||a.type),parentNo:a.parentNo?String(a.parentNo):null,active:true}
+    })
+  }
+  return rows.length
+}
 export async function POST(req:Request){const user=await getCurrentUser();if(!user)return NextResponse.redirect(appUrl('/login',req),303);const f=await req.formData();const accurateDbId=String(f.get('accurateDbId')||'').trim();const name=String(f.get('name')||'').trim();if(!accurateDbId||!name)return NextResponse.redirect(appUrl('/companies?companyError=invalid_company',req),303);const sub=subscriptionInfo(user);const count=await prisma.company.count({where:{userId:user.id,active:true}});const tenantDbKey=`${user.id}:${accurateDbId}`;const existing=await prisma.company.findUnique({where:{tenantDbKey}});if(!existing&&count>=sub.maxCompanies)return NextResponse.redirect(appUrl(`/companies?companyError=limit_${sub.maxCompanies}`,req),303);if(sub.expired)return NextResponse.redirect(appUrl('/companies?companyError=subscription_expired',req),303);const company=await prisma.company.upsert({where:{tenantDbKey},update:{name,accurateDbId,active:true},create:{userId:user.id,accurateDbId,tenantDbKey,name,active:true}});try{const total=await syncCoa(user.id,company.id,accurateDbId);return NextResponse.redirect(appUrl(`/companies?company=added&coa=${total}`,req),303)}catch(e:any){return NextResponse.redirect(appUrl(`/companies?company=added&coaError=${encodeURIComponent(e?.message||'COA sync failed')}`,req),303)}}

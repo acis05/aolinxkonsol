@@ -41,3 +41,16 @@ Start command otomatis menjalankan `prisma db push --skip-generate --accept-data
 
 ## Admin
 Admin awal dibuat otomatis ketika halaman login pertama kali dibuka, menggunakan `ADMIN_EMAIL` dan `ADMIN_PASSWORD` dari environment variables.
+
+## OAuth + COA fix (2026-09-14)
+- Callback OAuth sekarang langsung memvalidasi `db-list.do` setelah token tersimpan.
+- Error OAuth/API ditampilkan di halaman Perusahaan, tidak lagi tersembunyi.
+- `glaccount/list.do` mengikuti dokumentasi Accurate: scope `glaccount_view`, `X-Session-ID`, pagination `sp.page`/`sp.pageSize`.
+- Semua halaman COA ditarik memakai `sp.pageCount`, sehingga tidak berhenti prematur bila server membatasi page size.
+- Redirect host HTTP 308 Accurate ditangani manual dan Authorization + X-Session-ID dikirim ulang ke host baru.
+
+Environment Railway yang disarankan:
+```env
+ACCURATE_OAUTH_SCOPES="journal_voucher_view glaccount_view"
+```
+Setelah menambah/mengubah scope, klik **Hubungkan Ulang Accurate** agar token baru memperoleh scope tersebut.
