@@ -118,18 +118,58 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
 
         const createLines:any[]=[]
         for(const l of lines){
-          const accountNo=String(l?.accountNo ?? l?.account?.no ?? '').trim()
-          if(!accountNo){failures.push(`${item?.number||aid}: baris jurnal tanpa accountNo`);continue}
-          const existing=await prisma.account.findUnique({where:{companyId_accountNo:{companyId:id,accountNo}}})
-          const name=String(l?.accountName ?? l?.account?.name ?? existing?.name ?? accountNo)
-          const incomingType=l?.accountType ?? l?.account?.accountType
+          // Response detail Accurate dapat mengirim referensi akun dalam beberapa bentuk:
+          // accountNo langsung, object account/glAccount, atau hanya ID akun. Karena COA
+          // sudah disinkronkan, ID Accurate bisa kita resolve kembali ke nomor akun.
+          const accountObj=l?.account ?? l?.glAccount ?? l?.glaccount ?? l?.accountInfo ?? null
+          const accountAccurateIdRaw=
+            l?.accountId ?? l?.glAccountId ?? l?.glaccountId ??
+            accountObj?.id ?? accountObj?.accountId ?? accountObj?.glAccountId
+          const accountAccurateId=accountAccurateIdRaw===undefined||accountAccurateIdRaw===null?null:String(accountAccurateIdRaw)
+
+          let accountNo=String(
+            l?.accountNo ?? l?.glAccountNo ?? l?.accountCode ?? l?.no ??
+            accountObj?.no ?? accountObj?.accountNo ?? accountObj?.code ?? accountObj?.accountCode ?? ''
+          ).trim()
+
+          let existing=accountNo
+            ? await prisma.account.findUnique({where:{companyId_accountNo:{companyId:id,accountNo}}})
+            : null
+
+          // Detail JV sering hanya membawa accountId/glAccountId. Resolve dari master COA.
+          if(!existing && accountAccurateId){
+            existing=await prisma.account.findFirst({where:{companyId:id,accurateId:accountAccurateId}})
+            if(existing && !accountNo)accountNo=existing.accountNo
+          }
+
+          // Fallback terakhir: resolve berdasarkan nama jika unik di company tersebut.
+          const accountNameHint=String(
+            l?.accountName ?? l?.glAccountName ?? accountObj?.name ?? ''
+          ).trim()
+          if(!existing && !accountNo && accountNameHint){
+            const byName=await prisma.account.findMany({where:{companyId:id,name:accountNameHint},take:2})
+            if(byName.length===1){existing=byName[0];accountNo=byName[0].accountNo}
+          }
+
+          if(!accountNo){
+            const keys=Object.keys(l||{}).slice(0,18).join(',')
+            failures.push(`${item?.number||aid}: akun tidak ditemukan (keys: ${keys||'kosong'})`)
+            continue
+          }
+
+          const name=String(accountNameHint || existing?.name || accountNo)
+          const incomingType=l?.accountType ?? l?.glAccountType ?? accountObj?.accountType ?? accountObj?.type
           const type=incomingType?mapAccountType(incomingType):(existing?.type||'OTHER')
-          const a=await prisma.account.upsert({where:{companyId_accountNo:{companyId:id,accountNo}},update:{name,...(incomingType?{type}: {})},create:{companyId:id,accountNo,name,type}})
-          const amount=Math.abs(Number(l?.amount||0))
-          const t=String(l?.amountType||'').toUpperCase()
-          const debit=t==='DEBIT'?amount:Math.abs(Number(l?.debit||0))
-          const credit=t==='CREDIT'?amount:Math.abs(Number(l?.credit||0))
-          createLines.push({journalId:j.id,accountId:a.id,accountNo,memo:str(l?.memo),debit,credit,customerNo:str(l?.customerNo),vendorNo:str(l?.vendorNo),projectNo:str(l?.projectNo),department:str(l?.departmentName)})
+          const a=await prisma.account.upsert({
+            where:{companyId_accountNo:{companyId:id,accountNo}},
+            update:{name,...(incomingType?{type}: {}),...(accountAccurateId?{accurateId:accountAccurateId}: {})},
+            create:{companyId:id,accountNo,name,type,...(accountAccurateId?{accurateId:accountAccurateId}: {})}
+          })
+          const amount=Math.abs(Number(l?.amount ?? l?.value ?? 0))
+          const t=String(l?.amountType ?? l?.type ?? '').toUpperCase()
+          const debit=t==='DEBIT'?amount:Math.abs(Number(l?.debit ?? l?.debitAmount ?? 0))
+          const credit=t==='CREDIT'?amount:Math.abs(Number(l?.credit ?? l?.creditAmount ?? 0))
+          createLines.push({journalId:j.id,accountId:a.id,accountNo,memo:str(l?.memo??l?.description),debit,credit,customerNo:str(l?.customerNo??l?.customer?.no),vendorNo:str(l?.vendorNo??l?.vendor?.no),projectNo:str(l?.projectNo??l?.project?.no),department:str(l?.departmentName??l?.department?.name)})
         }
         if(createLines.length){await prisma.journalLine.createMany({data:createLines});lineTotal+=createLines.length}
         total++
