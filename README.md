@@ -87,5 +87,7 @@ Laporan Konsolidasi sekarang memakai format akuntansi umum berjenjang:
 
 PENTING: setelah upgrade ini, jalankan **Sync COA** untuk setiap database sekali lagi agar `accountType` asli Accurate (COGS, CASH_BANK, ACCOUNT_RECEIVABLE, dll.) tersimpan di `reportGroup` dan klasifikasi laporan menjadi presisi.
 
-## Railway runtime note
-This project intentionally uses the standard Next.js server (`next start`) on Railway. Do not enable `output: 'standalone'` unless the start command is also changed to run `.next/standalone/server.js` and static/public assets are copied into the standalone bundle.
+
+## Patch 2026-09-14 - Railway build fix
+- Fixed ExcelJS TypeScript comparison by normalizing `cell.col` with `Number(cell.col)`.
+- Removed `output: standalone` so Railway can continue using `next start`.

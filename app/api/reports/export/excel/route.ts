@@ -17,7 +17,7 @@ function addReportSheet(wb:ExcelJS.Workbook,name:string,title:string,subtitle:st
   ws.addRow([])
   const headers=['Keterangan',...companies.map(c=>c.name),'Eliminasi','Konsolidasi']
   const hr=ws.addRow(headers);hr.height=30
-  hr.eachCell(c=>{c.font={bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF252A31'}};c.alignment={vertical:'middle',horizontal:c.col===1?'left':'right',wrapText:true}})
+  hr.eachCell(c=>{c.font={bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF252A31'}};c.alignment={vertical:'middle',horizontal:Number(c.col)===1?'left':'right',wrapText:true}})
   for(const r of rows){
     if(r.kind==='section'){
       const row=ws.addRow([r.label]);ws.mergeCells(row.number,1,row.number,totalCols)
