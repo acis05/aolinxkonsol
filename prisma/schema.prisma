@@ -4,6 +4,20 @@ datasource db { provider = "postgresql" url = env("DATABASE_URL") }
 enum AccountType { ASSET LIABILITY EQUITY REVENUE EXPENSE OTHER }
 enum MappingType { REPORTING INTERCOMPANY }
 
+model AccurateOAuthCredential {
+  id                    String   @id @default("primary")
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String
+  tokenType             String   @default("bearer")
+  scope                 String?
+  expiresAt             DateTime
+  accurateUserId        String?
+  accurateUserName      String?
+  accurateUserEmail     String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
 model Company {
   id            String   @id @default(cuid())
   name          String
