@@ -98,3 +98,10 @@ PENTING: setelah upgrade ini, jalankan **Sync COA** untuk setiap database sekali
 - Default Sisi B otomatis memilih database kedua bila tersedia.
 - UI mobile/tablet diperbaiki: navigasi sticky-horizontal, form satu kolom, tabel/report scrollable, tombol full-width pada layar kecil.
 - Neraca: seluruh akun bertipe aset masuk Aset Lancar kecuali FIXED_ASSET dan ACCUMULATED_DEPRECIATION, yang masuk Aset Tidak Lancar.
+
+## Update: Rate Limit Sync & Balanced Elimination
+- Sync JV respects Accurate rate limit with request pacing (~7 req/sec), max 6 concurrent detail workers, and automatic retry/backoff for HTTP 429.
+- Journals with unchanged `lastUpdate` and existing detail lines are skipped on subsequent syncs.
+- COA is cached during sync to reduce database queries per journal line.
+- Elimination is calculated as a true two-sided debit/credit entry; auto-elimination only occurs when paired account balances have opposite raw debit/credit positions.
+- Balance Sheet includes prior-year accumulated P&L plus current-year P&L in equity, preventing historical temporary accounts from causing an artificial out-of-balance position.

@@ -48,10 +48,10 @@ export async function GET(req:Request){
   addReportSheet(wb,'Laba Rugi','Laporan Laba Rugi Konsolidasi',`Periode ${dateFmt(from)} s.d. ${dateFmt(to)}`,r.pnl,r.companies)
   addReportSheet(wb,'Neraca','Laporan Posisi Keuangan (Neraca) Konsolidasi',`Saldo kumulatif sampai ${dateFmt(to)}`,r.balanceSheet,r.companies)
   const ws=wb.addWorksheet('Eliminasi')
-  ws.addRow(['KONSAOL - Rekonsiliasi Eliminasi']);ws.mergeCells(1,1,1,4);ws.getCell('A1').font={bold:true,size:18}
-  ws.addRow(['Pasangan Akun','Saldo A','Saldo B','Nilai Eliminasi']);ws.getRow(2).eachCell(c=>{c.font={bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF252A31'}}})
-  for(const e of r.eliminationRows){const row=ws.addRow([e.label,e.source,e.target,e.amount]);for(let i=2;i<=4;i++)row.getCell(i).numFmt=moneyFmt}
-  ws.getColumn(1).width=70;ws.getColumn(2).width=20;ws.getColumn(3).width=20;ws.getColumn(4).width=20
+  ws.addRow(['KONSAOL - Jurnal Eliminasi']);ws.mergeCells(1,1,1,9);ws.getCell('A1').font={bold:true,size:18}
+  ws.addRow(['Pasangan Akun','Status','Saldo A','Saldo B','Debit A','Kredit A','Debit B','Kredit B','Nilai Eliminasi']);ws.getRow(2).eachCell(c=>{c.font={bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF252A31'}}})
+  for(const e of r.eliminationRows){const row=ws.addRow([e.label,e.status,e.source,e.target,e.sourceDebit,e.sourceCredit,e.targetDebit,e.targetCredit,e.amount]);for(let i=3;i<=9;i++)row.getCell(i).numFmt=moneyFmt}
+  ws.getColumn(1).width=70;for(let i=2;i<=9;i++)ws.getColumn(i).width=20
   const buffer=await wb.xlsx.writeBuffer()
   return new Response(buffer as ArrayBuffer,{headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Content-Disposition':`attachment; filename="KONSAOL_Laporan_${from.toISOString().slice(0,10)}_${to.toISOString().slice(0,10)}.xlsx"`,'Cache-Control':'no-store'}})
 }

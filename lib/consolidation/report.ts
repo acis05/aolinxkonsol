@@ -19,7 +19,7 @@ export type ConsolidatedReport = {
   to: Date
   pnl: ReportRow[]
   balanceSheet: ReportRow[]
-  eliminationRows: Array<{id:string;label:string;source:number;target:number;amount:number}>
+  eliminationRows: Array<{id:string;label:string;source:number;target:number;amount:number;sourceDebit:number;sourceCredit:number;targetDebit:number;targetCredit:number;status:string}>
   pnlSummary: {revenue:number;grossProfit:number;operatingProfit:number;netProfit:number}
   balanceSummary: {assets:number;liabilities:number;equity:number;difference:number}
 }
@@ -113,21 +113,64 @@ function makeAccountRows(byAccount:Map<string,{account:any;values:ReportValueMap
     })
 }
 
+function presentationFactor(type:string){
+  // Saldo laporan: aset/beban = debit-kredit, akun lain = kredit-debit.
+  return ['ASSET','EXPENSE'].includes(type)?1:-1
+}
+
 function eliminationAdjustments(mappings:any[],byAccount:Map<string,{account:any;values:ReportValueMap}>){
   const map=new Map<string,number>()
   const rows:any[]=[]
+
+  // Sisa saldo RAW (debit - kredit) per akun. Dengan basis raw inilah jurnal
+  // eliminasi dapat dibuktikan selalu Debit = Kredit.
+  const remainingRaw=new Map<string,number>()
+  const rawBalance=(accountId:string,account:any)=>{
+    if(remainingRaw.has(accountId))return remainingRaw.get(accountId)!
+    const presented=totalValues(byAccount.get(accountId)?.values||{})
+    const raw=presented*presentationFactor(account?.type||'OTHER')
+    remainingRaw.set(accountId,raw)
+    return raw
+  }
+
   for(const m of mappings){
-    const av=byAccount.get(m.sourceAccountId)?.values||{}
-    const bv=byAccount.get(m.targetAccountId)?.values||{}
-    const a=totalValues(av),b=totalValues(bv)
-    const amount=Math.min(Math.abs(a),Math.abs(b))
-    if(amount>0){
-      const aAdj=-Math.sign(a||1)*amount
-      const bAdj=-Math.sign(b||1)*amount
-      map.set(m.sourceAccountId,(map.get(m.sourceAccountId)||0)+aAdj)
-      map.set(m.targetAccountId,(map.get(m.targetAccountId)||0)+bAdj)
+    const aPresented=totalValues(byAccount.get(m.sourceAccountId)?.values||{})
+    const bPresented=totalValues(byAccount.get(m.targetAccountId)?.values||{})
+    const rawA=rawBalance(m.sourceAccountId,m.sourceAccount)
+    const rawB=rawBalance(m.targetAccountId,m.targetAccount)
+
+    let amount=0,rawAdjA=0,rawAdjB=0,status='NO_BALANCE'
+    // Hanya dua saldo dengan posisi debit/kredit berlawanan yang dapat dibuat menjadi
+    // jurnal eliminasi 2 sisi yang balance. Pair salah tidak dipaksakan.
+    if(Math.abs(rawA)>0.000001 && Math.abs(rawB)>0.000001){
+      if(Math.sign(rawA)!==Math.sign(rawB)){
+        amount=Math.min(Math.abs(rawA),Math.abs(rawB))
+        rawAdjA=-Math.sign(rawA)*amount
+        rawAdjB=-Math.sign(rawB)*amount
+        status='BALANCED'
+
+        // rawAdjA + rawAdjB harus 0. Konversi kembali ke sign penyajian laporan.
+        const aAdj=rawAdjA*presentationFactor(m.sourceAccount.type)
+        const bAdj=rawAdjB*presentationFactor(m.targetAccount.type)
+        map.set(m.sourceAccountId,(map.get(m.sourceAccountId)||0)+aAdj)
+        map.set(m.targetAccountId,(map.get(m.targetAccountId)||0)+bAdj)
+        remainingRaw.set(m.sourceAccountId,rawA+rawAdjA)
+        remainingRaw.set(m.targetAccountId,rawB+rawAdjB)
+      }else{
+        status='UNBALANCED_PAIR'
+      }
     }
-    rows.push({id:m.id,label:`${m.sourceAccount.accountNo} ${m.sourceAccount.name} ↔ ${m.targetAccount.accountNo} ${m.targetAccount.name}`,source:a,target:b,amount})
+
+    rows.push({
+      id:m.id,
+      label:`${m.sourceAccount.accountNo} ${m.sourceAccount.name} ↔ ${m.targetAccount.accountNo} ${m.targetAccount.name}`,
+      source:aPresented,target:bPresented,amount,
+      sourceDebit:rawAdjA>0?rawAdjA:0,
+      sourceCredit:rawAdjA<0?-rawAdjA:0,
+      targetDebit:rawAdjB>0?rawAdjB:0,
+      targetCredit:rawAdjB<0?-rawAdjB:0,
+      status
+    })
   }
   return{map,rows}
 }
@@ -187,20 +230,34 @@ export async function consolidatedReport(userId:string,from:Date,to:Date):Promis
   const assetValues=addValues(rCA.values,rNCA.values,companyIds),assetElim=rCA.elimination+rNCA.elimination
   const liabValues=addValues(rCL.values,rLL.values,companyIds),liabElim=rCL.elimination+rLL.elimination
 
-  // Laba/rugi tahun berjalan masuk ke ekuitas agar persamaan akuntansi tetap terbaca sebelum closing.
+  // Akun laba-rugi adalah akun temporer. Agar Neraca dari histori JV tetap balance,
+  // laba/rugi yang belum dipindahkan ke ekuitas harus ikut disajikan. Kita pisahkan
+  // menjadi saldo laba tahun sebelumnya dan laba/rugi tahun berjalan. Jika Accurate
+  // memang memiliki jurnal penutupan, saldo periode lama otomatis akan menjadi nol.
   const yearStart=new Date(to.getFullYear(),0,1)
-  const ytdData=await accountBalances(userId,yearStart,to,companyIds)
-  const ytdElim=eliminationAdjustments(mappings,ytdData.byAccount)
-  const yRev=makeAccountRows(ytdData.byAccount,companyIds,ytdElim.map,['REVENUE'])
-  const yCogs=makeAccountRows(ytdData.byAccount,companyIds,ytdElim.map,['COGS'])
-  const yOp=makeAccountRows(ytdData.byAccount,companyIds,ytdElim.map,['EXPENSE'])
-  const yOI=makeAccountRows(ytdData.byAccount,companyIds,ytdElim.map,['OTHER_INCOME'])
-  const yOE=makeAccountRows(ytdData.byAccount,companyIds,ytdElim.map,['OTHER_EXPENSE'])
-  const syRev=sumRows(yRev,companyIds),syCogs=sumRows(yCogs,companyIds),syOp=sumRows(yOp,companyIds),syOI=sumRows(yOI,companyIds),syOE=sumRows(yOE,companyIds)
-  const ytdValues=subValues(addValues(subValues(subValues(syRev.values,syCogs.values,companyIds),syOp.values,companyIds),syOI.values,companyIds),syOE.values,companyIds)
-  const ytdElimination=syRev.elimination-syCogs.elimination-syOp.elimination+syOI.elimination-syOE.elimination
-  const ytdRow=totalRow('current-year-profit','Laba (Rugi) Tahun Berjalan',ytdValues,ytdElimination,'subtotal')
-  const equityWithProfitValues=addValues(rEq.values,ytdValues,companyIds),equityWithProfitElim=rEq.elimination+ytdElimination
+  const previousEnd=new Date(yearStart.getTime()-1)
+
+  const profitFor=async(start:Date|undefined,end:Date)=>{
+    const data=await accountBalances(userId,start,end,companyIds)
+    const elim=eliminationAdjustments(mappings,data.byAccount)
+    const rev=sumRows(makeAccountRows(data.byAccount,companyIds,elim.map,['REVENUE']),companyIds)
+    const cogs=sumRows(makeAccountRows(data.byAccount,companyIds,elim.map,['COGS']),companyIds)
+    const op=sumRows(makeAccountRows(data.byAccount,companyIds,elim.map,['EXPENSE']),companyIds)
+    const oi=sumRows(makeAccountRows(data.byAccount,companyIds,elim.map,['OTHER_INCOME']),companyIds)
+    const oe=sumRows(makeAccountRows(data.byAccount,companyIds,elim.map,['OTHER_EXPENSE']),companyIds)
+    const values=subValues(addValues(subValues(subValues(rev.values,cogs.values,companyIds),op.values,companyIds),oi.values,companyIds),oe.values,companyIds)
+    const elimination=rev.elimination-cogs.elimination-op.elimination+oi.elimination-oe.elimination
+    return {values,elimination}
+  }
+
+  const priorProfit=await profitFor(undefined,previousEnd)
+  const currentProfit=await profitFor(yearStart,to)
+  const priorRow=totalRow('prior-year-profit','Saldo Laba / Laba (Rugi) Tahun Sebelumnya',priorProfit.values,priorProfit.elimination,'subtotal')
+  const ytdRow=totalRow('current-year-profit','Laba (Rugi) Tahun Berjalan',currentProfit.values,currentProfit.elimination,'subtotal')
+  const accumulatedProfitValues=addValues(priorProfit.values,currentProfit.values,companyIds)
+  const accumulatedProfitElim=priorProfit.elimination+currentProfit.elimination
+  const equityWithProfitValues=addValues(rEq.values,accumulatedProfitValues,companyIds)
+  const equityWithProfitElim=rEq.elimination+accumulatedProfitElim
   const leValues=addValues(liabValues,equityWithProfitValues,companyIds),leElim=liabElim+equityWithProfitElim
   const differenceValues=subValues(assetValues,leValues,companyIds),differenceElim=assetElim-leElim
 
@@ -211,7 +268,7 @@ export async function consolidatedReport(userId:string,from:Date,to:Date):Promis
     section('sec-current-liab','LIABILITAS JANGKA PENDEK'),...currentLiab,totalRow('tot-current-liab','Total Liabilitas Jangka Pendek',rCL.values,rCL.elimination),
     section('sec-long-liab','LIABILITAS JANGKA PANJANG'),...longLiab,totalRow('tot-long-liab','Total Liabilitas Jangka Panjang',rLL.values,rLL.elimination),
     totalRow('total-liabilities','TOTAL LIABILITAS',liabValues,liabElim,'total'),
-    section('sec-equity','EKUITAS'),...equity,ytdRow,totalRow('total-equity','TOTAL EKUITAS',equityWithProfitValues,equityWithProfitElim,'total'),
+    section('sec-equity','EKUITAS'),...equity,priorRow,ytdRow,totalRow('total-equity','TOTAL EKUITAS',equityWithProfitValues,equityWithProfitElim,'total'),
     totalRow('total-liab-equity','TOTAL LIABILITAS DAN EKUITAS',leValues,leElim,'total'),
     totalRow('balance-check','SELISIH / BALANCE CHECK',differenceValues,differenceElim,'check')
   ]
@@ -221,7 +278,7 @@ export async function consolidatedReport(userId:string,from:Date,to:Date):Promis
   const eliminationRows=mappings.map((m:any)=>{
     const isPnl=['REVENUE','EXPENSE'].includes(m.sourceAccount.type)||['REVENUE','EXPENSE'].includes(m.targetAccount.type)
     return (isPnl?pnlElimById.get(m.id):bsElimById.get(m.id)) || pnlElimById.get(m.id) || bsElimById.get(m.id)
-  }).filter(Boolean) as Array<{id:string;label:string;source:number;target:number;amount:number}>
+  }).filter(Boolean) as ConsolidatedReport['eliminationRows']
 
   return{
     companies,from,to,pnl,balanceSheet,

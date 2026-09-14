@@ -64,6 +64,14 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
     let detailCalls=0
     let listIncludesLines=true
     const failures:string[]=[]
+    let skippedUnchanged=0
+
+    // Cache COA sekali di awal. Ini menghindari query database per baris jurnal.
+    const cachedAccounts=await prisma.account.findMany({where:{companyId:id}})
+    const accountByNo=new Map(cachedAccounts.map(a=>[a.accountNo,a]))
+    const accountByAccurateId=new Map(cachedAccounts.filter(a=>a.accurateId).map(a=>[String(a.accurateId),a]))
+    const accountsByName=new Map<string,typeof cachedAccounts>()
+    for(const a of cachedAccounts){const arr=accountsByName.get(a.name)||[];arr.push(a);accountsByName.set(a.name,arr)}
 
     do{
       let body:any
@@ -83,10 +91,24 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
       // Utamakan detailJournalVoucher yang sudah ikut dalam list. Hanya jurnal yang
       // tidak membawa lines yang membutuhkan detail.do. Fetch fallback dilakukan
       // parallel terbatas supaya ratusan jurnal tidak menunggu satu per satu.
-      const resolved=await mapLimit(rows,8,async(item:any)=>{
+      // Preload jurnal yang sudah pernah sinkron. Jika lastUpdate sama dan lines sudah
+      // tersedia, detail.do tidak perlu dipanggil lagi. Resync data besar jadi sangat cepat.
+      const pageIds=rows.map((x:any)=>String(x?.id??x?.number??'')).filter(Boolean)
+      const existingJournals=pageIds.length?await prisma.journal.findMany({
+        where:{companyId:id,accurateId:{in:pageIds}},
+        select:{accurateId:true,lastUpdate:true,_count:{select:{lines:true}}}
+      }):[]
+      const existingById=new Map(existingJournals.map(j=>[j.accurateId,j]))
+
+      const resolved=await mapLimit(rows,6,async(item:any)=>{
         const rawId=item?.id ?? item?.number
         if(rawId===undefined||rawId===null)return {item,error:`page ${page}: journal tanpa id`}
         const aid=String(rawId)
+        const existingJournal=existingById.get(aid)
+        const itemLastUpdate=item?.lastUpdate?dateFromAccurate(item.lastUpdate):null
+        if(existingJournal && existingJournal._count.lines>0 && itemLastUpdate && existingJournal.lastUpdate && Math.abs(itemLastUpdate.getTime()-existingJournal.lastUpdate.getTime())<1000){
+          return {item,aid,skip:true,lineCount:existingJournal._count.lines}
+        }
         const inlineLines=journalDetailLines(item)
         if(inlineLines.length)return {item,aid,detail:item,lines:inlineLines}
         try{
@@ -104,6 +126,7 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
       for(const r of resolved as any[]){
         const item=r.item||{}
         const aid=r.aid
+        if(r.skip){skippedUnchanged++;lineTotal+=Number(r.lineCount||0);total++;continue}
         if(r.error||!aid){failures.push(`${item?.number||aid||'unknown'}: ${r.error||'id tidak valid'}`);continue}
         const detail=r.detail||item
         const lines=r.lines||[]
@@ -132,13 +155,11 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
             accountObj?.no ?? accountObj?.accountNo ?? accountObj?.code ?? accountObj?.accountCode ?? ''
           ).trim()
 
-          let existing=accountNo
-            ? await prisma.account.findUnique({where:{companyId_accountNo:{companyId:id,accountNo}}})
-            : null
+          let existing=accountNo ? accountByNo.get(accountNo) || null : null
 
-          // Detail JV sering hanya membawa accountId/glAccountId. Resolve dari master COA.
+          // Detail JV sering hanya membawa accountId/glAccountId. Resolve dari cache COA.
           if(!existing && accountAccurateId){
-            existing=await prisma.account.findFirst({where:{companyId:id,accurateId:accountAccurateId}})
+            existing=accountByAccurateId.get(accountAccurateId)||null
             if(existing && !accountNo)accountNo=existing.accountNo
           }
 
@@ -147,7 +168,7 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
             l?.accountName ?? l?.glAccountName ?? accountObj?.name ?? ''
           ).trim()
           if(!existing && !accountNo && accountNameHint){
-            const byName=await prisma.account.findMany({where:{companyId:id,name:accountNameHint},take:2})
+            const byName=accountsByName.get(accountNameHint)||[]
             if(byName.length===1){existing=byName[0];accountNo=byName[0].accountNo}
           }
 
@@ -165,6 +186,8 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
             update:{name,...(incomingType?{type,reportGroup:String(incomingType).toUpperCase()}: {}),...(accountAccurateId?{accurateId:accountAccurateId}: {})},
             create:{companyId:id,accountNo,name,type,...(incomingType?{reportGroup:String(incomingType).toUpperCase()}: {}),...(accountAccurateId?{accurateId:accountAccurateId}: {})}
           })
+          accountByNo.set(a.accountNo,a)
+          if(a.accurateId)accountByAccurateId.set(String(a.accurateId),a)
           const amount=Math.abs(Number(l?.amount ?? l?.value ?? 0))
           const t=String(l?.amountType ?? l?.type ?? '').toUpperCase()
           const debit=t==='DEBIT'?amount:Math.abs(Number(l?.debit ?? l?.debitAmount ?? 0))
@@ -177,7 +200,7 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
       page++
     }while(page<=pageCount && page<=1000)
 
-    const qs=new URLSearchParams({synced:String(total),lines:String(lineTotal),detailCalls:String(detailCalls),pages:String(pageCount)})
+    const qs=new URLSearchParams({synced:String(total),lines:String(lineTotal),detailCalls:String(detailCalls),pages:String(pageCount),skipped:String(skippedUnchanged)})
     if(failures.length){qs.set('syncFailed',String(failures.length));qs.set('syncError',failures.slice(0,3).join(' | ').slice(0,900))}
     return NextResponse.redirect(appUrl(`/companies?${qs.toString()}`,req),303)
   }catch(e:any){
