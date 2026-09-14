@@ -73,3 +73,8 @@ npm run dev
 
 ## Catatan API jurnal
 Dokumentasi yang tersedia menjelaskan request `list.do`, namun belum memberikan schema response lengkap `detail.do`. Parser detail dibuat defensif. Setelah response `detail.do` tersedia, fungsi `detailLines()` di `app/api/companies/[id]/sync/route.ts` dapat dibuat lebih ketat.
+
+
+## Railway deployment
+
+Project sudah mem-pin Node 22/npm 10. Build command adalah `npm run build`. Start command menjalankan `prisma db push --skip-generate` terlebih dahulu, lalu `next start`, sehingga schema PostgreSQL dibuat/di-update otomatis pada deploy pertama.
