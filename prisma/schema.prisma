@@ -7,6 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+}
+
+enum MappingType {
+  REPORTING
+  INTERCOMPANY
+}
+
 enum AccountType {
   ASSET
   LIABILITY
@@ -16,13 +33,28 @@ enum AccountType {
   OTHER
 }
 
-enum MappingType {
-  REPORTING
-  INTERCOMPANY
+model User {
+  id                 String             @id @default(cuid())
+  name               String
+  email              String             @unique
+  passwordHash       String
+  role               UserRole           @default(USER)
+  subscriptionStatus SubscriptionStatus @default(TRIAL)
+  trialEndsAt        DateTime?
+  subscriptionEndsAt DateTime?
+  addonSlots         Int                @default(0)
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  companies          Company[]
+  accurateCredential AccurateOAuthCredential?
+  eliminationMappings EliminationMapping[]
 }
 
 model AccurateOAuthCredential {
-  id                    String   @id @default("primary")
+  id                    String   @id @default(cuid())
+  userId                String?  @unique
+  user                  User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessTokenEncrypted  String
   refreshTokenEncrypted String
   tokenType             String   @default("bearer")
@@ -37,8 +69,11 @@ model AccurateOAuthCredential {
 
 model Company {
   id           String   @id @default(cuid())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
-  accurateDbId String?  @unique
+  accurateDbId String?
+  tenantDbKey  String?  @unique
   accurateHost String?
   sessionId    String?
   active       Boolean  @default(true)
@@ -46,22 +81,32 @@ model Company {
   updatedAt    DateTime @updatedAt
   accounts     Account[]
   journals     Journal[]
+  sourceMappings EliminationMapping[] @relation("SourceCompany")
+  targetMappings EliminationMapping[] @relation("TargetCompany")
   mappings     AccountMapping[]
+
+  @@index([userId])
 }
 
 model Account {
   id          String      @id @default(cuid())
   companyId   String
   company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accurateId  String?
   accountNo   String
   name        String
   type        AccountType @default(OTHER)
   reportGroup String?
+  parentNo    String?
+  active      Boolean     @default(true)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   lines       JournalLine[]
+  sourceMappings EliminationMapping[] @relation("SourceAccount")
+  targetMappings EliminationMapping[] @relation("TargetAccount")
 
   @@unique([companyId, accountNo])
+  @@index([companyId, type])
 }
 
 model Journal {
@@ -98,6 +143,28 @@ model JournalLine {
   department String?
 }
 
+model EliminationMapping {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceCompanyId String
+  sourceCompany   Company  @relation("SourceCompany", fields: [sourceCompanyId], references: [id], onDelete: Cascade)
+  sourceAccountId String
+  sourceAccount   Account  @relation("SourceAccount", fields: [sourceAccountId], references: [id], onDelete: Cascade)
+  targetCompanyId String
+  targetCompany   Company  @relation("TargetCompany", fields: [targetCompanyId], references: [id], onDelete: Cascade)
+  targetAccountId String
+  targetAccount   Account  @relation("TargetAccount", fields: [targetAccountId], references: [id], onDelete: Cascade)
+  note            String?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, sourceAccountId, targetAccountId])
+  @@index([userId])
+}
+
+
 model AccountMapping {
   id              String      @id @default(cuid())
   companyId       String
@@ -114,10 +181,13 @@ model AccountMapping {
 
 model ManualElimination {
   id          String   @id @default(cuid())
+  userId      String?
   transDate   DateTime
   accountKey  String
   description String?
   debit       Decimal  @default(0) @db.Decimal(20, 6)
   credit      Decimal  @default(0) @db.Decimal(20, 6)
   createdAt   DateTime @default(now())
+
+  @@index([userId])
 }

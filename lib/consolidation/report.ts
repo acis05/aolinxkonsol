@@ -1,35 +1,3 @@
 import { prisma } from '@/lib/db'
-
-const cashGroups = ['CASH','BANK','CASH_AND_BANK']
-function inferGroup(accountNo: string, name: string) {
-  const s = `${accountNo} ${name}`.toLowerCase()
-  if (/revenue|sales|pendapatan|penjualan/.test(s)) return 'Revenue'
-  if (/cogs|hpp|harga pokok/.test(s)) return 'Cost of Revenue'
-  if (/expense|beban|biaya/.test(s)) return 'Operating Expenses'
-  if (/cash|bank|kas/.test(s)) return 'Cash & Bank'
-  if (/receivable|piutang/.test(s)) return 'Accounts Receivable'
-  if (/inventory|persediaan/.test(s)) return 'Inventory'
-  if (/payable|hutang|utang/.test(s)) return 'Accounts Payable'
-  if (/equity|modal|retained|laba ditahan/.test(s)) return 'Equity'
-  return 'Other'
-}
-
-export async function consolidatedReport(from: Date, to: Date) {
-  const companies = await prisma.company.findMany({ where: { active: true }, orderBy: { name: 'asc' } })
-  const mappings = await prisma.accountMapping.findMany({ where: { type: 'REPORTING' } })
-  const map = new Map(mappings.map(m => [`${m.companyId}:${m.accountNo}`, m.consolidatedKey]))
-  const lines = await prisma.journalLine.findMany({
-    where: { journal: { transDate: { gte: from, lte: to }, company: { active: true } } },
-    include: { journal: true, account: true }
-  })
-  const rows = new Map<string, Record<string, number>>()
-  for (const l of lines) {
-    const key = map.get(`${l.journal.companyId}:${l.accountNo}`) || l.account?.reportGroup || inferGroup(l.accountNo, l.account?.name || '')
-    if (!rows.has(key)) rows.set(key, {})
-    const r = rows.get(key)!
-    const amount = Number(l.credit) - Number(l.debit)
-    r[l.journal.companyId] = (r[l.journal.companyId] || 0) + amount
-  }
-  const result = [...rows.entries()].map(([key, values]) => ({ key, values, total: Object.values(values).reduce((a,b)=>a+b,0) }))
-  return { companies, rows: result }
-}
+function normalSign(type:string,debit:number,credit:number){return ['ASSET','EXPENSE'].includes(type)?debit-credit:credit-debit}
+export async function consolidatedReport(userId:string,from:Date,to:Date){const companies=await prisma.company.findMany({where:{userId,active:true},orderBy:{name:'asc'}});const companyIds=companies.map(c=>c.id);const lines=await prisma.journalLine.findMany({where:{journal:{companyId:{in:companyIds},transDate:{gte:from,lte:to}}},include:{journal:true,account:true}});const rows=new Map<string,{key:string;name:string;type:string;values:Record<string,number>;elimination:number}>();for(const l of lines){const a=l.account;if(!a)continue;const key=`${a.accountNo}|${a.name}`;if(!rows.has(key))rows.set(key,{key:a.accountNo,name:a.name,type:a.type,values:{},elimination:0});const r=rows.get(key)!;r.values[l.journal.companyId]=(r.values[l.journal.companyId]||0)+normalSign(a.type,Number(l.debit),Number(l.credit))}const mappings=await prisma.eliminationMapping.findMany({where:{userId,active:true},include:{sourceAccount:true,targetAccount:true}});const balanceByAccount=new Map<string,number>();for(const l of lines){if(!l.accountId||!l.account)continue;balanceByAccount.set(l.accountId,(balanceByAccount.get(l.accountId)||0)+normalSign(l.account.type,Number(l.debit),Number(l.credit)))}const eliminationRows=mappings.map(m=>{const a=balanceByAccount.get(m.sourceAccountId)||0,b=balanceByAccount.get(m.targetAccountId)||0;const amount=Math.min(Math.abs(a),Math.abs(b));return{id:m.id,label:`Eliminasi ${m.sourceAccount.accountNo} ↔ ${m.targetAccount.accountNo}`,source:a,target:b,amount}});const result=[...rows.values()].map(r=>({...r,total:Object.values(r.values).reduce((a,b)=>a+b,0)}));const pnl=result.filter(r=>['REVENUE','EXPENSE'].includes(r.type));const balanceSheet=result.filter(r=>['ASSET','LIABILITY','EQUITY','OTHER'].includes(r.type));return{companies,pnl,balanceSheet,eliminationRows,totalElimination:eliminationRows.reduce((a,b)=>a+b.amount,0)}}

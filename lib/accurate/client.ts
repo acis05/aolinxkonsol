@@ -1,23 +1,2 @@
 import { getValidAccessToken } from './oauth'
-
-export type AccurateListResponse<T = any> = {
-  d?: T[]
-  s?: boolean
-  message?: string
-  sp?: { page?: number; pageSize?: number; pageCount?: number; rowCount?: number }
-  [key: string]: any
-}
-
-export async function accurateGet<T>(host: string, path: string, sessionId: string | null | undefined, params: Record<string, string | number | undefined> = {}) {
-  const url = new URL(path, host.endsWith('/') ? host : host + '/')
-  Object.entries(params).forEach(([k, v]) => { if (v !== undefined) url.searchParams.set(k, String(v)) })
-  const accessToken = await getValidAccessToken()
-  const headers: Record<string,string> = { Accept: 'application/json', Authorization: `Bearer ${accessToken}` }
-  if (sessionId) headers['X-Session-ID'] = sessionId
-  const res = await fetch(url, { headers, redirect: 'follow', cache: 'no-store' })
-  const text = await res.text()
-  let body: any
-  try { body = JSON.parse(text) } catch { body = { raw: text } }
-  if (!res.ok || body?.s === false) throw new Error(`Accurate ${res.status}: ${body?.d?.join?.(', ') || body?.message || text.slice(0,300)}`)
-  return body as T
-}
+export async function accurateGet<T>(userId:string,host:string,path:string,sessionId:string|null|undefined,params:Record<string,string|number|undefined>={}){const url=new URL(path,host.endsWith('/')?host:host+'/');Object.entries(params).forEach(([k,v])=>{if(v!==undefined)url.searchParams.set(k,String(v))});const accessToken=await getValidAccessToken(userId);const headers:Record<string,string>={Accept:'application/json',Authorization:`Bearer ${accessToken}`};if(sessionId)headers['X-Session-ID']=sessionId;const res=await fetch(url,{headers,redirect:'follow',cache:'no-store'});const text=await res.text();let body:any;try{body=JSON.parse(text)}catch{body={raw:text}}if(!res.ok||body?.s===false)throw new Error(`Accurate ${res.status}: ${body?.d?.join?.(', ')||body?.message||text.slice(0,300)}`);return body as T}

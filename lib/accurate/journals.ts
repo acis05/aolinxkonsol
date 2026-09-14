@@ -1,6 +1,6 @@
 import { accurateGet } from './client'
 
-export async function listJournalVouchers(opts: { host: string; sessionId?: string | null; from?: string; to?: string; page?: number; pageSize?: number }) {
+export async function listJournalVouchers(opts: { userId: string; host: string; sessionId?: string | null; from?: string; to?: string; page?: number; pageSize?: number }) {
   const path = process.env.ACCURATE_JOURNAL_LIST_PATH || '/accurate/api/journal-voucher/list.do'
   const params: Record<string,string|number|undefined> = {
     fields: 'id,number,transDate,description,lastUpdate',
@@ -13,12 +13,12 @@ export async function listJournalVouchers(opts: { host: string; sessionId?: stri
     params['filter.transDate.val[0]'] = opts.from
     params['filter.transDate.val[1]'] = opts.to
   }
-  return accurateGet<any>(opts.host, path, opts.sessionId, params)
+  return accurateGet<any>((opts as any).userId, opts.host, path, opts.sessionId, params)
 }
 
-export async function detailJournalVoucher(opts: { host: string; sessionId?: string | null; id: string }) {
+export async function detailJournalVoucher(opts: { userId: string; host: string; sessionId?: string | null; id: string }) {
   const path = process.env.ACCURATE_JOURNAL_DETAIL_PATH || '/accurate/api/journal-voucher/detail.do'
-  return accurateGet<any>(opts.host, path, opts.sessionId, { id: opts.id })
+  return accurateGet<any>((opts as any).userId, opts.host, path, opts.sessionId, { id: opts.id })
 }
 
 export function unwrapList(body: any): any[] {
