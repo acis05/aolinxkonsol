@@ -91,3 +91,10 @@ PENTING: setelah upgrade ini, jalankan **Sync COA** untuk setiap database sekali
 ## Patch 2026-09-14 - Railway build fix
 - Fixed ExcelJS TypeScript comparison by normalizing `cell.col` with `Number(cell.col)`.
 - Removed `output: standalone` so Railway can continue using `next start`.
+
+## Update: Mapping, Mobile UI, dan Neraca
+- Dropdown akun mapping sekarang otomatis mengikuti database yang dipilih.
+- Backend mapping menginfer database dari akun untuk mencegah mismatch/invalid mapping.
+- Default Sisi B otomatis memilih database kedua bila tersedia.
+- UI mobile/tablet diperbaiki: navigasi sticky-horizontal, form satu kolom, tabel/report scrollable, tombol full-width pada layar kecil.
+- Neraca: seluruh akun bertipe aset masuk Aset Lancar kecuali FIXED_ASSET dan ACCUMULATED_DEPRECIATION, yang masuk Aset Tidak Lancar.

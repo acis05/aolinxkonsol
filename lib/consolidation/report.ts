@@ -165,11 +165,21 @@ export async function consolidatedReport(userId:string,from:Date,to:Date):Promis
   ]
 
   // NERACA - saldo kumulatif s.d. tanggal laporan.
-  const currentAssets=makeAccountRows(bsData.byAccount,companyIds,bsElim.map,['CASH_BANK','ACCOUNT_RECEIVABLE','INVENTORY','OTHER_CURRENT_ASSET'])
-  const nonCurrentAssets=makeAccountRows(bsData.byAccount,companyIds,bsElim.map,['FIXED_ASSET','ACCUMULATED_DEPRECIATION','OTHER_ASSET'])
-  // fallback aset lama yang belum memiliki reportGroup
-  const fallbackAssets=makeAccountRows(bsData.byAccount,companyIds,bsElim.map,['OTHER']).filter(r=>bsData.byAccount.get(r.accountId!)?.account?.type==='ASSET')
-  nonCurrentAssets.push(...fallbackAssets)
+  // Klasifikasi aset KONSAOL:
+  // Semua akun bertipe ASSET masuk Aset Lancar, KECUALI aktiva tetap dan akumulasi penyusutan.
+  // Ini memastikan Kas/Bank, Piutang, Persediaan, Other Asset dan aset lain tidak salah masuk non-lancar.
+  const allAssetRows=makeAccountRows(bsData.byAccount,companyIds,bsElim.map,['CASH_BANK','ACCOUNT_RECEIVABLE','INVENTORY','OTHER_CURRENT_ASSET','OTHER_ASSET','FIXED_ASSET','ACCUMULATED_DEPRECIATION','OTHER'])
+    .filter(r=>bsData.byAccount.get(r.accountId!)?.account?.type==='ASSET')
+  const currentAssets=allAssetRows.filter(r=>{
+    const a=bsData.byAccount.get(r.accountId!)?.account
+    const g=accurateGroup(a)
+    return g!=='FIXED_ASSET' && g!=='ACCUMULATED_DEPRECIATION'
+  })
+  const nonCurrentAssets=allAssetRows.filter(r=>{
+    const a=bsData.byAccount.get(r.accountId!)?.account
+    const g=accurateGroup(a)
+    return g==='FIXED_ASSET' || g==='ACCUMULATED_DEPRECIATION'
+  })
   const currentLiab=makeAccountRows(bsData.byAccount,companyIds,bsElim.map,['ACCOUNT_PAYABLE','OTHER_CURRENT_LIABILITY'])
   const longLiab=makeAccountRows(bsData.byAccount,companyIds,bsElim.map,['LONG_TERM_LIABILITY'])
   const equity=makeAccountRows(bsData.byAccount,companyIds,bsElim.map,['EQUITY'])
