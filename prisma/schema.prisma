@@ -1,0 +1,89 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+
+enum AccountType { ASSET LIABILITY EQUITY REVENUE EXPENSE OTHER }
+enum MappingType { REPORTING INTERCOMPANY }
+
+model Company {
+  id            String   @id @default(cuid())
+  name          String
+  accurateDbId  String?  @unique
+  accurateHost  String?
+  sessionId     String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  accounts      Account[]
+  journals      Journal[]
+  mappings      AccountMapping[]
+}
+
+model Account {
+  id          String      @id @default(cuid())
+  companyId   String
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accountNo   String
+  name        String
+  type        AccountType @default(OTHER)
+  reportGroup String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  lines       JournalLine[]
+  @@unique([companyId, accountNo])
+}
+
+model Journal {
+  id            String       @id @default(cuid())
+  companyId     String
+  company       Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accurateId    String
+  number        String?
+  transDate     DateTime
+  description   String?
+  lastUpdate    DateTime?
+  raw           Json?
+  lines         JournalLine[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  @@unique([companyId, accurateId])
+  @@index([companyId, transDate])
+}
+
+model JournalLine {
+  id          String   @id @default(cuid())
+  journalId   String
+  journal     Journal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  accountId   String?
+  account     Account? @relation(fields: [accountId], references: [id])
+  accountNo   String
+  memo        String?
+  debit       Decimal  @default(0) @db.Decimal(20, 6)
+  credit      Decimal  @default(0) @db.Decimal(20, 6)
+  customerNo  String?
+  vendorNo    String?
+  projectNo   String?
+  department  String?
+}
+
+model AccountMapping {
+  id              String      @id @default(cuid())
+  companyId       String
+  company         Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accountNo       String
+  type            MappingType
+  consolidatedKey String
+  counterpartyId  String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  @@unique([companyId, accountNo, type])
+}
+
+model ManualElimination {
+  id          String   @id @default(cuid())
+  transDate   DateTime
+  accountKey  String
+  description String?
+  debit       Decimal  @default(0) @db.Decimal(20, 6)
+  credit      Decimal  @default(0) @db.Decimal(20, 6)
+  createdAt   DateTime @default(now())
+}
