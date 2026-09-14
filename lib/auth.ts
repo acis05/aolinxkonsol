@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
 
-const COOKIE = 'konsaol_session'
+export const SESSION_COOKIE = 'konsaol_session'
 const DAY = 86400
 
 function secret(){
@@ -34,11 +34,11 @@ export function parseSessionToken(token?:string|null){
   try{const v=JSON.parse(Buffer.from(payload,'base64url').toString()); if(v.exp<Math.floor(Date.now()/1000)) return null; return v as {uid:string;role:string;exp:number}}catch{return null}
 }
 export async function setSession(user:{id:string;role:string}){
-  const jar=await cookies(); jar.set(COOKIE,createSessionToken(user),{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:7*DAY})
+  const jar=await cookies(); jar.set(SESSION_COOKIE,createSessionToken(user),{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:7*DAY})
 }
-export async function clearSession(){const jar=await cookies();jar.delete(COOKIE)}
+export async function clearSession(){const jar=await cookies();jar.delete(SESSION_COOKIE)}
 export async function getCurrentUser(){
-  const jar=await cookies(); const s=parseSessionToken(jar.get(COOKIE)?.value); if(!s) return null
+  const jar=await cookies(); const s=parseSessionToken(jar.get(SESSION_COOKIE)?.value); if(!s) return null
   return prisma.user.findUnique({where:{id:s.uid}})
 }
 export async function requireUser(){const u=await getCurrentUser();if(!u||!u.active) redirect('/login');return u}

@@ -54,3 +54,10 @@ Environment Railway yang disarankan:
 ACCURATE_OAUTH_SCOPES="journal_voucher_view glaccount_view"
 ```
 Setelah menambah/mengubah scope, klik **Hubungkan Ulang Accurate** agar token baru memperoleh scope tersebut.
+
+## OAuth callback fix (2026-09)
+Callback OAuth tidak lagi bergantung pada cookie sesi browser. `state` OAuth sekarang berisi user id + expiry yang ditandatangani HMAC memakai `AUTH_SECRET`/`APP_ENCRYPTION_KEY`. Ini mencegah loop callback -> /login pada reverse proxy/Railway ketika cookie sesi tidak ikut pada round-trip OAuth. Callback juga membuat ulang cookie sesi KONSAOL setelah token berhasil ditukar dan memvalidasi `db-list.do` sebelum menampilkan status connected.
+
+Pastikan `APP_URL` dan origin dari `ACCURATE_REDIRECT_URI` sama. Contoh:
+APP_URL=https://konsaol-production.up.railway.app
+ACCURATE_REDIRECT_URI=https://konsaol-production.up.railway.app/api/accurate/oauth/callback

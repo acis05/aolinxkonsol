@@ -1,32 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { exchangeAuthorizationCode, listDatabases } from '@/lib/accurate/oauth'
 import { appUrl } from '@/lib/app-url'
-import { getCurrentUser } from '@/lib/auth'
+import { createSessionToken, SESSION_COOKIE } from '@/lib/auth'
+import { parseOAuthState } from '@/lib/oauth-state'
+import { prisma } from '@/lib/db'
 
 export const dynamic='force-dynamic'
 
+function withSession(res:NextResponse,user:{id:string;role:string}){
+  res.cookies.set(SESSION_COOKIE,createSessionToken(user),{
+    httpOnly:true,
+    secure:process.env.NODE_ENV==='production',
+    sameSite:'lax',
+    path:'/',
+    maxAge:7*86400,
+  })
+  res.cookies.delete('accurate_oauth_state')
+  return res
+}
+
 export async function GET(req:NextRequest){
-  const user=await getCurrentUser()
-  if(!user)return NextResponse.redirect(appUrl('/login',req))
   const url=new URL(req.url)
   const code=url.searchParams.get('code')
   const state=url.searchParams.get('state')
-  const error=url.searchParams.get('error')
-  if(error)return NextResponse.redirect(appUrl(`/companies?oauthError=${encodeURIComponent(error)}`,req))
-  if(!code)return NextResponse.redirect(appUrl('/companies?oauthError=missing_code',req))
-  const expected=req.cookies.get('accurate_oauth_state')?.value
-  if(!state||!expected||state!==expected)return NextResponse.redirect(appUrl('/companies?oauthError=invalid_state',req))
+  const oauthError=url.searchParams.get('error')
+
+  // State membawa identitas user yang ditandatangani, sehingga callback tidak
+  // bergantung pada cookie session yang kadang hilang setelah round-trip OAuth.
+  const parsed=parseOAuthState(state)
+  if(!parsed){
+    return NextResponse.redirect(appUrl('/login?error=invalid_oauth_state',req))
+  }
+  const user=await prisma.user.findUnique({where:{id:parsed.uid}})
+  if(!user||!user.active){
+    return NextResponse.redirect(appUrl('/login?error=user_not_found',req))
+  }
+
+  if(oauthError){
+    return withSession(NextResponse.redirect(appUrl(`/companies?oauthError=${encodeURIComponent(oauthError)}`,req)),user)
+  }
+  if(!code){
+    return withSession(NextResponse.redirect(appUrl('/companies?oauthError=missing_code',req)),user)
+  }
+
   try{
     await exchangeAuthorizationCode(code,user.id)
-    // Jangan hanya menyimpan token: validasi langsung bahwa token benar-benar
-    // dapat membaca daftar database. Ini membuat kegagalan OAuth/API terlihat.
     const databases=await listDatabases(user.id)
-    const res=NextResponse.redirect(appUrl(`/companies?oauth=connected&dbCount=${databases.length}`,req))
-    res.cookies.delete('accurate_oauth_state')
-    return res
+    return withSession(NextResponse.redirect(appUrl(`/companies?oauth=connected&dbCount=${databases.length}`,req)),user)
   }catch(e:any){
-    const res=NextResponse.redirect(appUrl(`/companies?oauthError=${encodeURIComponent(e?.message||'oauth_failed')}`,req))
-    res.cookies.delete('accurate_oauth_state')
-    return res
+    return withSession(NextResponse.redirect(appUrl(`/companies?oauthError=${encodeURIComponent(e?.message||'oauth_failed')}`,req)),user)
   }
 }
