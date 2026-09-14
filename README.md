@@ -37,7 +37,7 @@ Build: `npm run build`
 
 Start: `npm run start`
 
-Start command otomatis menjalankan `prisma db push --skip-generate` sebelum Next.js start.
+Start command otomatis menjalankan `prisma db push --skip-generate --accept-data-loss` sebelum Next.js start. Pada upgrade v1 → v2, Prisma memberi warning karena penambahan unique constraint pada kolom baru nullable (`userId` dan `tenantDbKey`). Data lama pada kolom baru tersebut bernilai NULL, sehingga constraint dapat ditambahkan tanpa menghapus data transaksi lama.
 
 ## Admin
 Admin awal dibuat otomatis ketika halaman login pertama kali dibuka, menggunakan `ADMIN_EMAIL` dan `ADMIN_PASSWORD` dari environment variables.
