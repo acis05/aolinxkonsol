@@ -1,16 +1,21 @@
-import { prisma } from '@/lib/db'
-import { openDatabase } from '@/lib/accurate/oauth'
 import { NextResponse } from 'next/server'
-export async function POST(req:Request){
-  const f=await req.formData()
-  const accurateDbId=String(f.get('accurateDbId')||'')
-  const name=String(f.get('name')||'')
-  if(!accurateDbId || !name) throw new Error('Database Accurate wajib dipilih')
-  const opened=await openDatabase(accurateDbId)
+import { prisma } from '@/lib/db'
+import { appUrl } from '@/lib/app-url'
+
+export async function POST(req: Request) {
+  const form = await req.formData()
+  const accurateDbId = String(form.get('accurateDbId') || '').trim()
+  const name = String(form.get('name') || '').trim()
+
+  if (!accurateDbId || !name) {
+    return NextResponse.redirect(appUrl('/companies?companyError=invalid_company', req), 303)
+  }
+
   await prisma.company.upsert({
-    where:{accurateDbId},
-    update:{name,accurateHost:opened.host,sessionId:opened.sessionId,active:true},
-    create:{name,accurateDbId,accurateHost:opened.host,sessionId:opened.sessionId}
+    where: { accurateDbId },
+    update: { name, active: true },
+    create: { accurateDbId, name, active: true }
   })
-  return NextResponse.redirect(new URL('/companies?company=added',req.url),303)
+
+  return NextResponse.redirect(appUrl('/companies?company=added', req), 303)
 }

@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import { detailJournalVoucher, listJournalVouchers, unwrapDetail, unwrapList } from '@/lib/accurate/journals'
 import { openDatabase } from '@/lib/accurate/oauth'
 import { NextResponse } from 'next/server'
+import { appUrl } from '@/lib/app-url'
 
 function dateFromAccurate(v:any){ if(!v) return new Date(); if(/^\d{2}\/\d{2}\/\d{4}/.test(v)){const [d,m,y]=v.slice(0,10).split('/').map(Number);return new Date(y,m-1,d)} return new Date(v) }
 function detailLines(d:any){return d?.detailJournalVoucher || d?.detailJournalVouchers || d?.details || d?.detail || []}
@@ -29,5 +30,5 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
     }
     if(rows.length<100) break;page++
   }
-  return NextResponse.redirect(new URL(`/companies?synced=${total}`,req.url),303)
+  return NextResponse.redirect(appUrl(`/companies?synced=${total}`, req),303)
 }
