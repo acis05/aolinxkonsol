@@ -61,3 +61,10 @@ Callback OAuth tidak lagi bergantung pada cookie sesi browser. `state` OAuth sek
 Pastikan `APP_URL` dan origin dari `ACCURATE_REDIRECT_URI` sama. Contoh:
 APP_URL=https://konsaol-production.up.railway.app
 ACCURATE_REDIRECT_URI=https://konsaol-production.up.railway.app/api/accurate/oauth/callback
+
+## Update Journal Voucher sync
+- Tambah menu **Jurnal Umum** untuk melihat seluruh JV yang sudah disinkronkan beserta baris debit/kredit.
+- Tambah tombol **Sync Semua JV** per database.
+- Pagination JV mengikuti `sp.pageCount`, bukan berhenti berdasarkan jumlah row halaman pertama.
+- `journal-voucher/detail.do` sekarang wajib berhasil agar baris debit/kredit disimpan; error detail ditampilkan kembali ke halaman Perusahaan.
+- Filter tanggal HTML (`yyyy-MM-dd`) otomatis dikonversi ke format API Accurate (`dd/MM/yyyy`).
