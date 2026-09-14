@@ -162,8 +162,8 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
           const type=incomingType?mapAccountType(incomingType):(existing?.type||'OTHER')
           const a=await prisma.account.upsert({
             where:{companyId_accountNo:{companyId:id,accountNo}},
-            update:{name,...(incomingType?{type}: {}),...(accountAccurateId?{accurateId:accountAccurateId}: {})},
-            create:{companyId:id,accountNo,name,type,...(accountAccurateId?{accurateId:accountAccurateId}: {})}
+            update:{name,...(incomingType?{type,reportGroup:String(incomingType).toUpperCase()}: {}),...(accountAccurateId?{accurateId:accountAccurateId}: {})},
+            create:{companyId:id,accountNo,name,type,...(incomingType?{reportGroup:String(incomingType).toUpperCase()}: {}),...(accountAccurateId?{accurateId:accountAccurateId}: {})}
           })
           const amount=Math.abs(Number(l?.amount ?? l?.value ?? 0))
           const t=String(l?.amountType ?? l?.type ?? '').toUpperCase()

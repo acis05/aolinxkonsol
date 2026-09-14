@@ -75,3 +75,14 @@ ACCURATE_REDIRECT_URI=https://konsaol-production.up.railway.app/api/accurate/oau
 - Falls back to `detail.do` only for rows without inline details, with concurrency limited to 8.
 - Response parser prefers object `r` over message-array `d` to avoid zero-line journals.
 - Journal page is paginated and reports legacy header-only rows.
+
+## Laporan keuangan v2
+
+Laporan Konsolidasi sekarang memakai format akuntansi umum berjenjang:
+- Laba Rugi: Pendapatan Usaha, Beban Pokok Pendapatan, Laba Kotor, Beban Usaha, Laba Usaha, Pendapatan/Beban Lain-lain, Laba Bersih.
+- Neraca: Aset Lancar, Aset Tidak Lancar, Liabilitas Jangka Pendek, Liabilitas Jangka Panjang, Ekuitas, Laba/Rugi Tahun Berjalan, dan balance check.
+- Neraca dihitung kumulatif sampai tanggal laporan, bukan hanya pergerakan dalam rentang tanggal.
+- Kolom laporan: masing-masing perusahaan, Eliminasi, Konsolidasi.
+- Export Excel dan PDF tersedia dari halaman Laporan dan memakai struktur yang sama dengan layar.
+
+PENTING: setelah upgrade ini, jalankan **Sync COA** untuk setiap database sekali lagi agar `accountType` asli Accurate (COGS, CASH_BANK, ACCOUNT_RECEIVABLE, dll.) tersimpan di `reportGroup` dan klasifikasi laporan menjadi presisi.

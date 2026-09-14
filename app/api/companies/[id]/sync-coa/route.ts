@@ -19,8 +19,8 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
       const no=String(a.no||a.accountNo||a.id)
       await prisma.account.upsert({
         where:{companyId_accountNo:{companyId:id,accountNo:no}},
-        update:{accurateId:a.id!=null?String(a.id):null,name:String(a.name||no),type:mapAccountType(a.accountType||a.type),parentNo:a.parentNo?String(a.parentNo):null,active:true},
-        create:{companyId:id,accurateId:a.id!=null?String(a.id):null,accountNo:no,name:String(a.name||no),type:mapAccountType(a.accountType||a.type),parentNo:a.parentNo?String(a.parentNo):null,active:true}
+        update:{accurateId:a.id!=null?String(a.id):null,name:String(a.name||no),type:mapAccountType(a.accountType||a.type),reportGroup:String(a.accountType||a.type||'').toUpperCase()||null,parentNo:a.parentNo?String(a.parentNo):null,active:true},
+        create:{companyId:id,accurateId:a.id!=null?String(a.id):null,accountNo:no,name:String(a.name||no),type:mapAccountType(a.accountType||a.type),reportGroup:String(a.accountType||a.type||'').toUpperCase()||null,parentNo:a.parentNo?String(a.parentNo):null,active:true}
       })
     }
     return NextResponse.redirect(appUrl(`/companies?coa=${rows.length}`,req),303)
