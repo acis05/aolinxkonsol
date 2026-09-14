@@ -86,3 +86,6 @@ Laporan Konsolidasi sekarang memakai format akuntansi umum berjenjang:
 - Export Excel dan PDF tersedia dari halaman Laporan dan memakai struktur yang sama dengan layar.
 
 PENTING: setelah upgrade ini, jalankan **Sync COA** untuk setiap database sekali lagi agar `accountType` asli Accurate (COGS, CASH_BANK, ACCOUNT_RECEIVABLE, dll.) tersimpan di `reportGroup` dan klasifikasi laporan menjadi presisi.
+
+## Railway runtime note
+This project intentionally uses the standard Next.js server (`next start`) on Railway. Do not enable `output: 'standalone'` unless the start command is also changed to run `.next/standalone/server.js` and static/public assets are copied into the standalone bundle.
