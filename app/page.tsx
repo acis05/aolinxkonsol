@@ -1,7 +1,25 @@
+import Image from 'next/image'
 import { prisma } from '@/lib/db'
+import { Building2, BookOpenText, Rows3, Waypoints, ArrowRight } from 'lucide-react'
+
 export const dynamic = 'force-dynamic'
 
 export default async function Home(){
-  const [companies,journals,lines,mappings]=await Promise.all([prisma.company.count(),prisma.journal.count(),prisma.journalLine.count(),prisma.accountMapping.count()])
-  return <><div className="top"><div><h1>Consolidation Dashboard</h1><div className="muted">Ringkasan data konsolidasi Accurate Online</div></div><a className="btn" href="/companies">Manage Companies</a></div><div className="grid grid4"><div className="card"><div className="muted">Companies</div><div className="metric">{companies}</div></div><div className="card"><div className="muted">Journal Vouchers</div><div className="metric">{journals}</div></div><div className="card"><div className="muted">Journal Lines</div><div className="metric">{lines}</div></div><div className="card"><div className="muted">Mappings</div><div className="metric">{mappings}</div></div></div><div className="card" style={{marginTop:16}}><h3>Workflow</h3><p className="muted">Connect Accurate via OAuth → pilih database company → sync jurnal → mapping akun → buka laporan konsolidasi.</p></div></>
+  const [companies,journals,lines,mappings]=await Promise.all([
+    prisma.company.count(),prisma.journal.count(),prisma.journalLine.count(),prisma.accountMapping.count()
+  ])
+  const metrics=[
+    {label:'Perusahaan',value:companies,icon:Building2},
+    {label:'Jurnal Umum',value:journals,icon:BookOpenText},
+    {label:'Baris Jurnal',value:lines,icon:Rows3},
+    {label:'Mapping Akun',value:mappings,icon:Waypoints},
+  ]
+  return <>
+    <div className="top"><div><div className="eyebrow">KONSAOL Dashboard</div><h1>Konsolidasi keuangan, lebih sederhana.</h1><div className="muted">Kelola beberapa database Accurate Online dan susun laporan konsolidasi dalam satu tempat.</div></div><a className="btn" href="/companies">Kelola Perusahaan <ArrowRight size={16}/></a></div>
+    <div className="hero">
+      <div className="heroPanel"><h2>Financial Consolidation Workspace</h2><p>Tarik jurnal melalui OAuth Accurate Online, petakan akun antar perusahaan, lalu tampilkan laporan konsolidasi dengan struktur yang konsisten dan mudah ditelusuri.</p><div className="heroSteps"><span className="heroStep">1. Connect OAuth</span><span className="heroStep">2. Pilih Database</span><span className="heroStep">3. Sync Jurnal</span><span className="heroStep">4. Mapping</span><span className="heroStep">5. Konsolidasi</span></div></div>
+      <div className="card accentCard"><Image className="accentLogo" src="/konsaol-icon.png" alt="KONSAOL" width={160} height={160}/><b>KONSAOL</b><span>Konsolidasi Accurate Online</span></div>
+    </div>
+    <div className="grid grid4">{metrics.map(({label,value,icon:Icon})=><div className="card metricCard" key={label}><div className="metricLabel"><span className="metricIcon"><Icon size={16}/></span>{label}</div><div className="metric">{value.toLocaleString('id-ID')}</div></div>)}</div>
+  </>
 }
