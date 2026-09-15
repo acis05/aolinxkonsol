@@ -65,6 +65,7 @@ export async function processJournalSyncJob(jobId:string){
     const opened=await openDatabase(job.userId,c0.accurateDbId)
     let company=await prisma.company.update({where:{id:c0.id},data:{accurateHost:opened.host,sessionId:opened.sessionId}})
 
+    const syncUserId=job.userId
     const mode=job.mode
     const from=mode==='PERIOD'&&job.fromDate?apiDate(job.fromDate):undefined
     const to=mode==='PERIOD'&&job.toDate?apiDate(job.toDate):undefined
@@ -90,9 +91,9 @@ export async function processJournalSyncJob(jobId:string){
       if(!fresh||fresh.status==='CANCELLED')return
       let body:any
       try{
-        body=await listJournalVouchers({userId:job.userId,host:company.accurateHost!,sessionId:company.sessionId,from,to,lastUpdateFrom,page,pageSize:Number(process.env.ACCURATE_JOURNAL_PAGE_SIZE||100),includeLines:listIncludesLines})
+        body=await listJournalVouchers({userId:syncUserId,host:company.accurateHost!,sessionId:company.sessionId,from,to,lastUpdateFrom,page,pageSize:Number(process.env.ACCURATE_JOURNAL_PAGE_SIZE||100),includeLines:listIncludesLines})
       }catch(e){
-        if(listIncludesLines){listIncludesLines=false;body=await listJournalVouchers({userId:job.userId,host:company.accurateHost!,sessionId:company.sessionId,from,to,lastUpdateFrom,page,pageSize:Number(process.env.ACCURATE_JOURNAL_PAGE_SIZE||100),includeLines:false})}else throw e
+        if(listIncludesLines){listIncludesLines=false;body=await listJournalVouchers({userId:syncUserId,host:company.accurateHost!,sessionId:company.sessionId,from,to,lastUpdateFrom,page,pageSize:Number(process.env.ACCURATE_JOURNAL_PAGE_SIZE||100),includeLines:false})}else throw e
       }
       const rows=unwrapList(body), pi=pageInfo(body);pageCount=pi.pageCount
       const pageIds=rows.map((x:any)=>String(x?.id??x?.number??'')).filter(Boolean)
@@ -105,7 +106,7 @@ export async function processJournalSyncJob(jobId:string){
         if(itemLastUpdate&&(!maxSourceLastUpdate||itemLastUpdate>maxSourceLastUpdate))maxSourceLastUpdate=itemLastUpdate
         if(existingJournal&&existingJournal._count.lines>0&&itemLastUpdate&&existingJournal.lastUpdate&&Math.abs(itemLastUpdate.getTime()-existingJournal.lastUpdate.getTime())<1000)return {item,aid,skip:true,lineCount:existingJournal._count.lines}
         const inlineLines=journalDetailLines(item);if(inlineLines.length)return {item,aid,detail:item,lines:inlineLines}
-        try{detailCalls++;const raw=await detailJournalVoucher({userId:job.userId,host:company.accurateHost!,sessionId:company.sessionId,id:aid});const detail=unwrapDetail(raw);return {item,aid,detail,lines:journalDetailLines(detail)}}catch(e:any){return {item,aid,error:String(e?.message||e).slice(0,220)}}
+        try{detailCalls++;const raw=await detailJournalVoucher({userId:syncUserId,host:company.accurateHost!,sessionId:company.sessionId,id:aid});const detail=unwrapDetail(raw);return {item,aid,detail,lines:journalDetailLines(detail)}}catch(e:any){return {item,aid,error:String(e?.message||e).slice(0,220)}}
       })
 
       for(const r of resolved as any[]){
