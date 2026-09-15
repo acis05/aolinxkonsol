@@ -116,3 +116,15 @@ KONSAOL now provides two reconciliation modes:
 - Transaction matching by amount, date tolerance, journal/reference, memo, customer/vendor signals.
 
 Matched and partial-match values can be converted into a dated balanced elimination journal. Use the transaction mode as a review aid before posting eliminations; review low-confidence matches manually.
+
+## Background incremental Journal Voucher sync
+KONSAOL now supports database-backed sync jobs so large Accurate Online histories do not keep the browser request open.
+
+- **Quick Sync**: default. Uses Accurate `filter.lastUpdate > journalSyncWatermark` and only downloads changed/new Journal Vouchers.
+- **Sync Periode**: manually re-sync a date range without moving the global watermark.
+- **Full Resync**: re-check all history; intended for initial load or repair only.
+- Progress is stored in PostgreSQL (`SyncJob`) and shown live in the Companies page. A stale/failed job can be resumed from its saved page.
+- Accurate API rate limiting/retry remains active, so initial imports with tens of thousands of detail calls can take time, but normal daily syncs should process only the delta.
+
+Optional environment variable:
+`ACCURATE_JOURNAL_PAGE_SIZE=100` (increase only if your Accurate tenant accepts a larger page size reliably).

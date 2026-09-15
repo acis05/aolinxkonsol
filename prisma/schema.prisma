@@ -24,6 +24,20 @@ enum MappingType {
   INTERCOMPANY
 }
 
+enum SyncJobMode {
+  QUICK
+  PERIOD
+  FULL
+}
+
+enum SyncJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
 enum AccountType {
   ASSET
   LIABILITY
@@ -49,6 +63,7 @@ model User {
   companies          Company[]
   accurateCredential AccurateOAuthCredential?
   eliminationMappings EliminationMapping[]
+  syncJobs            SyncJob[]
 }
 
 model AccurateOAuthCredential {
@@ -84,6 +99,9 @@ model Company {
   sourceMappings EliminationMapping[] @relation("SourceCompany")
   targetMappings EliminationMapping[] @relation("TargetCompany")
   mappings     AccountMapping[]
+  syncJobs     SyncJob[]
+  journalSyncWatermark DateTime?
+  journalFullSyncedAt  DateTime?
 
   @@index([userId])
 }
@@ -183,6 +201,37 @@ model AccountMapping {
   updatedAt       DateTime    @updatedAt
 
   @@unique([companyId, accountNo, type])
+}
+
+
+model SyncJob {
+  id                  String        @id @default(cuid())
+  userId              String
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId           String
+  company             Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  mode                 SyncJobMode
+  status               SyncJobStatus @default(QUEUED)
+  fromDate             DateTime?
+  toDate               DateTime?
+  currentPage          Int           @default(1)
+  pageCount            Int           @default(1)
+  rowCount             Int           @default(0)
+  processedJournals    Int           @default(0)
+  processedLines       Int           @default(0)
+  skippedUnchanged     Int           @default(0)
+  detailCalls          Int           @default(0)
+  failedCount          Int           @default(0)
+  errorMessage         String?
+  maxSourceLastUpdate  DateTime?
+  startedAt            DateTime?
+  heartbeatAt          DateTime?
+  finishedAt           DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@index([userId, status])
+  @@index([companyId, createdAt])
 }
 
 model ManualElimination {

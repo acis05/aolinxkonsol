@@ -6,6 +6,7 @@ export type JournalListOptions = {
   sessionId?: string | null
   from?: string
   to?: string
+  lastUpdateFrom?: string
   page?: number
   pageSize?: number
   includeLines?: boolean
@@ -15,12 +16,12 @@ export async function listJournalVouchers(opts: JournalListOptions) {
   const path = process.env.ACCURATE_JOURNAL_LIST_PATH || '/accurate/api/journal-voucher/list.do'
   const basicFields = 'id,number,transDate,description,lastUpdate'
   const params: Record<string,string|number|undefined> = {
-    // Dokumentasi Accurate menyebut fields pada list boleh memakai field dari detail.do.
-    // Kita coba ambil detailJournalVoucher sekaligus agar tidak perlu N request detail.
     fields: opts.includeLines === false ? basicFields : `${basicFields},detailJournalVoucher`,
     'sp.page': opts.page || 1,
-    'sp.pageSize': opts.pageSize || 100,
-    'sp.sort': 'transDate|asc;number|asc'
+    'sp.pageSize': opts.pageSize || Number(process.env.ACCURATE_JOURNAL_PAGE_SIZE || 100),
+    // lastUpdate membuat quick sync stabil: hanya delta yang berubah sejak watermark.
+    // Sorting lastUpdate lalu id/number membantu pagination incremental tetap deterministik.
+    'sp.sort': opts.lastUpdateFrom ? 'lastUpdate|asc;number|asc' : 'transDate|asc;number|asc'
   }
 
   if (opts.from && opts.to) {
@@ -33,6 +34,11 @@ export async function listJournalVouchers(opts: JournalListOptions) {
   } else if (opts.to) {
     params['filter.transDate.op'] = 'LESS_EQUAL_THAN'
     params['filter.transDate.val'] = opts.to
+  }
+
+  if (opts.lastUpdateFrom) {
+    params['filter.lastUpdate.op'] = 'GREATER_THAN'
+    params['filter.lastUpdate.val'] = opts.lastUpdateFrom
   }
 
   return accurateGet<any>(opts.userId, opts.host, path, opts.sessionId, params)
@@ -52,8 +58,6 @@ export function unwrapList(body: any): any[] {
 }
 
 export function unwrapDetail(body: any): any {
-  // Accurate tidak selalu memakai envelope yang sama. Untuk response save, record
-  // dapat berada di `r` sementara `d` berisi array pesan. Jangan salah memilih d.
   if (body?.r && typeof body.r === 'object' && !Array.isArray(body.r)) return body.r
   if (body?.d && typeof body.d === 'object' && !Array.isArray(body.d)) return body.d
   if (body?.data && typeof body.data === 'object' && !Array.isArray(body.data)) return body.data
@@ -63,33 +67,15 @@ export function unwrapDetail(body: any): any {
 
 export function journalDetailLines(detail:any):any[] {
   if (!detail) return []
-  const candidates = [
-    detail?.detailJournalVoucher,
-    detail?.detailJournalVouchers,
-    detail?.detailJournalVoucherList,
-    detail?.journalVoucherDetail,
-    detail?.journalVoucherDetails,
-    detail?.details,
-    detail?.detail,
-    detail?.lines
-  ]
+  const candidates = [detail?.detailJournalVoucher,detail?.detailJournalVouchers,detail?.detailJournalVoucherList,detail?.journalVoucherDetail,detail?.journalVoucherDetails,detail?.details,detail?.detail,detail?.lines]
   for (const value of candidates) if (Array.isArray(value)) return value
-  // Kadang envelope belum dibuka dengan struktur berbeda. Cari satu level tambahan.
   for (const key of ['r','d','data','result']) {
     const nested=detail?.[key]
-    if(nested && nested!==detail){
-      const found=journalDetailLines(nested)
-      if(found.length)return found
-    }
+    if(nested && nested!==detail){const found=journalDetailLines(nested);if(found.length)return found}
   }
   return []
 }
 
 export function pageInfo(body:any){
-  return {
-    page: Math.max(1, Number(body?.sp?.page || 1)),
-    pageCount: Math.max(1, Number(body?.sp?.pageCount || 1)),
-    rowCount: Math.max(0, Number(body?.sp?.rowCount || 0)),
-    pageSize: Math.max(1, Number(body?.sp?.pageSize || 20))
-  }
+  return {page:Math.max(1,Number(body?.sp?.page||1)),pageCount:Math.max(1,Number(body?.sp?.pageCount||1)),rowCount:Math.max(0,Number(body?.sp?.rowCount||0)),pageSize:Math.max(1,Number(body?.sp?.pageSize||20))}
 }
