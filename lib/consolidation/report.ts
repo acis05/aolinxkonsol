@@ -19,7 +19,7 @@ export type ConsolidatedReport = {
   to: Date
   pnl: ReportRow[]
   balanceSheet: ReportRow[]
-  eliminationRows: Array<{id:string;label:string;source:number;target:number;amount:number;sourceDebit:number;sourceCredit:number;targetDebit:number;targetCredit:number;status:string}>
+  eliminationRows: Array<{id:string;label:string;date:Date;source:number;target:number;amount:number;sourceDebit:number;sourceCredit:number;targetDebit:number;targetCredit:number;status:string}>
   pnlSummary: {revenue:number;grossProfit:number;operatingProfit:number;netProfit:number}
   balanceSummary: {assets:number;liabilities:number;equity:number;difference:number}
 }
@@ -118,58 +118,36 @@ function presentationFactor(type:string){
   return ['ASSET','EXPENSE'].includes(type)?1:-1
 }
 
-function eliminationAdjustments(mappings:any[],byAccount:Map<string,{account:any;values:ReportValueMap}>){
+function eliminationAdjustments(mappings:any[],byAccount:Map<string,{account:any;values:ReportValueMap}>,from?:Date,to?:Date){
   const map=new Map<string,number>()
   const rows:any[]=[]
-
-  // Sisa saldo RAW (debit - kredit) per akun. Dengan basis raw inilah jurnal
-  // eliminasi dapat dibuktikan selalu Debit = Kredit.
-  const remainingRaw=new Map<string,number>()
-  const rawBalance=(accountId:string,account:any)=>{
-    if(remainingRaw.has(accountId))return remainingRaw.get(accountId)!
-    const presented=totalValues(byAccount.get(accountId)?.values||{})
-    const raw=presented*presentationFactor(account?.type||'OTHER')
-    remainingRaw.set(accountId,raw)
-    return raw
-  }
-
   for(const m of mappings){
-    const aPresented=totalValues(byAccount.get(m.sourceAccountId)?.values||{})
-    const bPresented=totalValues(byAccount.get(m.targetAccountId)?.values||{})
-    const rawA=rawBalance(m.sourceAccountId,m.sourceAccount)
-    const rawB=rawBalance(m.targetAccountId,m.targetAccount)
+    const date=new Date(m.eliminationDate||m.createdAt)
+    if(to && date>to)continue
+    if(from && date<from)continue
 
-    let amount=0,rawAdjA=0,rawAdjB=0,status='NO_BALANCE'
-    // Hanya dua saldo dengan posisi debit/kredit berlawanan yang dapat dibuat menjadi
-    // jurnal eliminasi 2 sisi yang balance. Pair salah tidak dipaksakan.
-    if(Math.abs(rawA)>0.000001 && Math.abs(rawB)>0.000001){
-      if(Math.sign(rawA)!==Math.sign(rawB)){
-        amount=Math.min(Math.abs(rawA),Math.abs(rawB))
-        rawAdjA=-Math.sign(rawA)*amount
-        rawAdjB=-Math.sign(rawB)*amount
-        status='BALANCED'
+    const sourceDebit=Number(m.sourceDebit||0),sourceCredit=Number(m.sourceCredit||0)
+    const targetDebit=Number(m.targetDebit||0),targetCredit=Number(m.targetCredit||0)
+    const amount=Number(m.amount||0)
+    const rawAdjA=sourceDebit-sourceCredit
+    const rawAdjB=targetDebit-targetCredit
+    const balanced=Math.abs((sourceDebit+targetDebit)-(sourceCredit+targetCredit))<0.000001 && amount>0
 
-        // rawAdjA + rawAdjB harus 0. Konversi kembali ke sign penyajian laporan.
-        const aAdj=rawAdjA*presentationFactor(m.sourceAccount.type)
-        const bAdj=rawAdjB*presentationFactor(m.targetAccount.type)
-        map.set(m.sourceAccountId,(map.get(m.sourceAccountId)||0)+aAdj)
-        map.set(m.targetAccountId,(map.get(m.targetAccountId)||0)+bAdj)
-        remainingRaw.set(m.sourceAccountId,rawA+rawAdjA)
-        remainingRaw.set(m.targetAccountId,rawB+rawAdjB)
-      }else{
-        status='UNBALANCED_PAIR'
-      }
+    if(balanced){
+      const aAdj=rawAdjA*presentationFactor(m.sourceAccount.type)
+      const bAdj=rawAdjB*presentationFactor(m.targetAccount.type)
+      map.set(m.sourceAccountId,(map.get(m.sourceAccountId)||0)+aAdj)
+      map.set(m.targetAccountId,(map.get(m.targetAccountId)||0)+bAdj)
     }
 
     rows.push({
       id:m.id,
       label:`${m.sourceAccount.accountNo} ${m.sourceAccount.name} ↔ ${m.targetAccount.accountNo} ${m.targetAccount.name}`,
-      source:aPresented,target:bPresented,amount,
-      sourceDebit:rawAdjA>0?rawAdjA:0,
-      sourceCredit:rawAdjA<0?-rawAdjA:0,
-      targetDebit:rawAdjB>0?rawAdjB:0,
-      targetCredit:rawAdjB<0?-rawAdjB:0,
-      status
+      date,
+      source:totalValues(byAccount.get(m.sourceAccountId)?.values||{}),
+      target:totalValues(byAccount.get(m.targetAccountId)?.values||{}),
+      amount,sourceDebit,sourceCredit,targetDebit,targetCredit,
+      status:balanced?'BALANCED':'NO_BALANCE'
     })
   }
   return{map,rows}
@@ -182,8 +160,8 @@ export async function consolidatedReport(userId:string,from:Date,to:Date):Promis
 
   const pnlData=await accountBalances(userId,from,to,companyIds)
   const bsData=await accountBalances(userId,undefined,to,companyIds)
-  const pnlElim=eliminationAdjustments(mappings,pnlData.byAccount)
-  const bsElim=eliminationAdjustments(mappings,bsData.byAccount)
+  const pnlElim=eliminationAdjustments(mappings,pnlData.byAccount,from,to)
+  const bsElim=eliminationAdjustments(mappings,bsData.byAccount,undefined,to)
 
   // LABA RUGI
   const revenue=makeAccountRows(pnlData.byAccount,companyIds,pnlElim.map,['REVENUE'])
@@ -239,7 +217,7 @@ export async function consolidatedReport(userId:string,from:Date,to:Date):Promis
 
   const profitFor=async(start:Date|undefined,end:Date)=>{
     const data=await accountBalances(userId,start,end,companyIds)
-    const elim=eliminationAdjustments(mappings,data.byAccount)
+    const elim=eliminationAdjustments(mappings,data.byAccount,start,end)
     const rev=sumRows(makeAccountRows(data.byAccount,companyIds,elim.map,['REVENUE']),companyIds)
     const cogs=sumRows(makeAccountRows(data.byAccount,companyIds,elim.map,['COGS']),companyIds)
     const op=sumRows(makeAccountRows(data.byAccount,companyIds,elim.map,['EXPENSE']),companyIds)

@@ -105,3 +105,6 @@ PENTING: setelah upgrade ini, jalankan **Sync COA** untuk setiap database sekali
 - COA is cached during sync to reduce database queries per journal line.
 - Elimination is calculated as a true two-sided debit/credit entry; auto-elimination only occurs when paired account balances have opposite raw debit/credit positions.
 - Balance Sheet includes prior-year accumulated P&L plus current-year P&L in equity, preventing historical temporary accounts from causing an artificial out-of-balance position.
+
+## Eliminasi bertanggal
+Mapping eliminasi sekarang disimpan sebagai jurnal eliminasi tetap (tanggal, nilai, debit, kredit). Jurnal memengaruhi Laba Rugi hanya bila tanggal eliminasi berada di periode laporan, dan memengaruhi Neraca bila tanggal eliminasi <= tanggal laporan. Mapping lama dari versi sebelum fitur ini sebaiknya dibuka/disimpan ulang agar nilai jurnal tersimpan.

@@ -52,3 +52,21 @@
   .authPage{padding:14px}.authCard{padding:20px}.authBrand h1{font-size:29px}.authBrand img{max-width:260px}
   .journalCard>summary{grid-template-columns:1fr}.journalDesc{grid-column:auto}.journalAmount{text-align:left}
 }
+
+/* Elimination journal preview */
+.mappingDate{grid-column:1 / -1;max-width:320px}
+.mappingDate>span{display:flex;align-items:center;gap:6px}
+.eliminationPreview{grid-column:1 / -1;border:1px solid #e7e9ee;border-radius:16px;padding:16px;background:#fbfcfe}
+.previewBalances{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+.previewBalances>div{background:white;border:1px solid #eceef2;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:5px}
+.previewBalances span{font-size:12px;color:#6b7280}.previewBalances b{font-size:18px}
+.journalPreviewTable{overflow:hidden;border:1px solid #e6e8ed;border-radius:12px;background:white}
+.journalPreviewHead,.journalPreviewRow,.journalPreviewTotal{display:grid;grid-template-columns:minmax(240px,1fr) 150px 150px;gap:10px;padding:10px 12px;align-items:center}
+.journalPreviewHead{background:#252a31;color:white;font-size:12px;font-weight:700;text-transform:uppercase}
+.journalPreviewRow{border-top:1px solid #edf0f3}.journalPreviewRow b,.journalPreviewTotal b{text-align:right}
+.journalPreviewTotal{border-top:2px solid #ef476f;background:#fff1f4;font-weight:800}
+@media(max-width:720px){
+  .previewBalances{grid-template-columns:1fr}
+  .journalPreviewTable{overflow-x:auto}.journalPreviewHead,.journalPreviewRow,.journalPreviewTotal{min-width:620px}
+  .mappingDate{max-width:none}
+}

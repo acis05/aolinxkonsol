@@ -156,6 +156,12 @@ model EliminationMapping {
   targetAccountId String
   targetAccount   Account  @relation("TargetAccount", fields: [targetAccountId], references: [id], onDelete: Cascade)
   note            String?
+  eliminationDate DateTime @default(now())
+  amount          Decimal  @default(0) @db.Decimal(20, 6)
+  sourceDebit     Decimal  @default(0) @db.Decimal(20, 6)
+  sourceCredit    Decimal  @default(0) @db.Decimal(20, 6)
+  targetDebit     Decimal  @default(0) @db.Decimal(20, 6)
+  targetCredit    Decimal  @default(0) @db.Decimal(20, 6)
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
