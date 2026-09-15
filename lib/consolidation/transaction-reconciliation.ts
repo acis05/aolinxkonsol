@@ -28,11 +28,13 @@ async function loadLines(accountId:string,from:Date,to:Date):Promise<TxLine[]>{
   return rows.map((r:any)=>{
     const debit=Number(r.debit||0),credit=Number(r.credit||0),raw=debit-credit
     const number=clean(r.journal.number),desc=clean(r.journal.description),memo=clean(r.memo),customer=clean(r.customerNo),vendor=clean(r.vendorNo)
-    return{
+    const direction: TxLine['direction'] = raw >= 0 ? 'DEBIT' : 'CREDIT'
+    const line: TxLine = {
       lineId:r.id,journalId:r.journal.id,companyId:r.journal.companyId,accountId:String(r.accountId||''),accountNo:clean(r.accountNo),
       journalNumber:number,journalDate:r.journal.transDate,description:desc,memo,customerNo:customer,vendorNo:vendor,
-      raw,amount:Math.abs(raw),direction:raw>=0?'DEBIT':'CREDIT',reference:refFrom(number,desc,memo),tokens:tokens(number,desc,memo,customer,vendor)
+      raw,amount:Math.abs(raw),direction,reference:refFrom(number,desc,memo),tokens:tokens(number,desc,memo,customer,vendor)
     }
+    return line
   }).filter(x=>x.amount>0.000001)
 }
 
