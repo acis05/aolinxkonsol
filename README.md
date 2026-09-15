@@ -108,3 +108,11 @@ PENTING: setelah upgrade ini, jalankan **Sync COA** untuk setiap database sekali
 
 ## Eliminasi bertanggal
 Mapping eliminasi sekarang disimpan sebagai jurnal eliminasi tetap (tanggal, nilai, debit, kredit). Jurnal memengaruhi Laba Rugi hanya bila tanggal eliminasi berada di periode laporan, dan memengaruhi Neraca bila tanggal eliminasi <= tanggal laporan. Mapping lama dari versi sebelum fitur ini sebaiknya dibuka/disimpan ulang agar nilai jurnal tersimpan.
+
+
+## Transaction-level Intercompany Matching
+KONSAOL now provides two reconciliation modes:
+- Balance reconciliation per mapped account pair.
+- Transaction matching by amount, date tolerance, journal/reference, memo, customer/vendor signals.
+
+Matched and partial-match values can be converted into a dated balanced elimination journal. Use the transaction mode as a review aid before posting eliminations; review low-confidence matches manually.
